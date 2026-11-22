@@ -45,6 +45,8 @@ button.primary {
   color: #fff; font-size: 16px; font-weight: 500;
 }
 button.primary:active { filter: brightness(.95); }
+button.ghost { width: 100%; margin-top: 10px; color: var(--text-3); background: transparent; border-color: transparent; font-size: 13px; }
+button.ghost:active { background: #eef1f5; }
 
 .recent { margin-top: 26px; }
 .recent .label { margin: 0 0 8px; font-size: 12.5px; color: var(--text-3); }
