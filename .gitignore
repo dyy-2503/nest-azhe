@@ -40,3 +40,7 @@ mobile/android/build/
 mobile/android/app/build/
 mobile/android/local.properties
 mobile/out/
+
+# 本地临时下载的测试包（不要提交）
+dist-*.apk
+dist-*.zip
