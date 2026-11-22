@@ -1,0 +1,40 @@
+name: release
+
+# 打 tag（v*）时自动：构建可分发的 zip → 建 GitHub Release → 把 zip 当附件传上去
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: 构建分发包
+        run: node scripts/package.mjs
+
+      - name: 确认包里没有敏感文件
+        shell: pwsh
+        run: |
+          $zip = Get-ChildItem dist/*.zip | Select-Object -First 1
+          if (-not $zip) { throw '没有生成 zip' }
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          $z = [System.IO.Compression.ZipFile]::OpenRead($zip.FullName)
+          $bad = $z.Entries | Where-Object { $_.FullName -match 'nest-me\.json|_key\.txt|\.pfx$|\.pem$|^[^/]+/data/nest\.db' }
+          $z.Dispose()
+          if ($bad) { throw "包里混进了敏感文件: $($bad.FullName -join ', ')" }
+          Write-Host "包检查通过：$($zip.Name) ($([math]::Round($zip.Length/1MB,1)) MB)"
+
+      - name: 建 Release 并上传附件
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "${{ github.ref_name }}" dist/*.zip --title "Nest ${{ github.ref_name }}" --generate-notes
