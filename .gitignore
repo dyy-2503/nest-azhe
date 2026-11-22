@@ -27,3 +27,8 @@ dist/
 coverage/
 *.log
 *.err
+
+# 桌面客户端（Electron）构建产物
+desktop/node_modules/
+desktop/dist/
+desktop/release/

@@ -1,0 +1,94 @@
+{
+    "name":  "nest-desktop",
+    "version":  "0.2.0",
+    "private":  true,
+    "description":  "Nest 桌面客户端：聊天 + 一键把自己的 AI 接上线",
+    "author":  "Nest contributors",
+    "license":  "MIT",
+    "main":  "main.cjs",
+    "scripts":  {
+                    "dev":  "electron .",
+                    "smoke":  "electron . --smoke",
+                    "build":  "electron-builder --win nsis",
+                    "build:dir":  "electron-builder --win --dir"
+                },
+    "devDependencies":  {
+                            "electron":  "^45.4.1",
+                            "electron-builder":  "^26.0.12"
+                        },
+    "build":  {
+                  "appId":  "app.nest.chat",
+                  "productName":  "Nest",
+                  "copyright":  "Nest contributors",
+                  "directories":  {
+                                      "output":  "dist"
+                                  },
+                  "files":  [
+                                "main.cjs",
+                                "preload.cjs",
+                                "ui/**/*"
+                            ],
+                  "extraResources":  [
+                                         {
+                                             "from":  "../server",
+                                             "to":  "app-core/server"
+                                         },
+                                         {
+                                             "from":  "../public",
+                                             "to":  "app-core/public"
+                                         },
+                                         {
+                                             "from":  "../bridge",
+                                             "to":  "app-core/bridge",
+                                             "filter":  [
+                                                            "**/*",
+                                                            "!nest-me.json",
+                                                            "!nest-bridge.state.json",
+                                                            "!_key.txt",
+                                                            "!.nest-images/**",
+                                                            "!.nest-videos/**",
+                                                            "!.nest-voices/**"
+                                                        ]
+                                         },
+                                         {
+                                             "from":  "../vendor",
+                                             "to":  "app-core/vendor"
+                                         },
+                                         {
+                                             "from":  "../scripts/tunnel.mjs",
+                                             "to":  "app-core/scripts/tunnel.mjs"
+                                         },
+                                         {
+                                             "from":  "../package.json",
+                                             "to":  "app-core/package.json"
+                                         },
+                                         {
+                                             "from":  "../README.md",
+                                             "to":  "app-core/README.md"
+                                         },
+                                         {
+                                             "from":  "../LICENSE",
+                                             "to":  "app-core/LICENSE"
+                                         }
+                                     ],
+                  "win":  {
+                              "target":  [
+                                             {
+                                                 "target":  "nsis",
+                                                 "arch":  [
+                                                              "x64"
+                                                          ]
+                                             }
+                                         ],
+                              "artifactName":  "Nest-Setup-${version}.${ext}"
+                          },
+                  "nsis":  {
+                               "oneClick":  false,
+                               "perMachine":  false,
+                               "allowToChangeInstallationDirectory":  true,
+                               "createDesktopShortcut":  true,
+                               "createStartMenuShortcut":  true,
+                               "shortcutName":  "Nest"
+                           }
+              }
+}

@@ -1,10 +1,11 @@
-// 数据层：node:sqlite（Node 22 内置，免原生编译）
+﻿// 数据层：node:sqlite（Node 22 内置，免原生编译）
 import { DatabaseSync } from 'node:sqlite';
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 
 export const ROOT = join(import.meta.dirname, '..');
-export const DATA_DIR = join(ROOT, 'data');
+// 数据目录可外置：桌面客户端把它指到用户目录（安装目录通常是只读的 Program Files）
+export const DATA_DIR = process.env.NEST_DATA_DIR || join(ROOT, 'data');
 export const MEDIA_DIR = join(DATA_DIR, 'media');
 mkdirSync(MEDIA_DIR, { recursive: true });
 

@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Nest</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="wrap">
+  <header class="hero">
+    <div class="logo">N</div>
+    <div>
+      <h1>Nest</h1>
+      <p class="sub">自己的群，自己的人。 · 只和 AI 聊天</p>
+    </div>
+    <div class="version" id="version"></div>
+  </header>
+
+  <section class="cards">
+    <!-- 1. 当服务器 -->
+    <article class="card" id="card-host">
+      <div class="card-head">
+        <span class="badge">①</span>
+        <h2>我要当服务器</h2>
+      </div>
+      <p class="desc">在这台电脑上开一个 Nest，朋友用浏览器 / 客户端连进来。聊天记录存在这台电脑上。</p>
+      <label class="field">
+        端口
+        <input id="host-port" type="number" value="8787" min="1024" max="65535">
+      </label>
+      <div class="row">
+        <button class="primary" id="btn-host">启动服务器</button>
+        <button class="ghost" id="btn-host-stop" hidden>停止</button>
+        <button class="ghost" id="btn-host-open" hidden>打开</button>
+      </div>
+      <p class="status" id="host-status">未启动</p>
+    </article>
+
+    <!-- 2. 加入别人的服务器 -->
+    <article class="card" id="card-join">
+      <div class="card-head">
+        <span class="badge">②</span>
+        <h2>加入朋友的服务器</h2>
+      </div>
+      <p class="desc">拿到朋友给的地址（比如 https://xxx.ts.net）和邀请码，在这里打开就能注册、聊天。</p>
+      <label class="field">
+        服务器地址
+        <input id="join-url" type="text" placeholder="https:// 或 http:// 开头">
+      </label>
+      <div class="row">
+        <button class="primary" id="btn-join">打开</button>
+      </div>
+      <p class="status" id="join-status">—</p>
+    </article>
+
+    <!-- 3. 我的 AI -->
+    <article class="card" id="card-ai">
+      <div class="card-head">
+        <span class="badge">③</span>
+        <h2>我的 AI 上线</h2>
+      </div>
+      <p class="desc">
+        在 Nest 里「创建 AI」时会给一段口令，里面有两样东西：服务器地址 + 钥匙。
+        填进去，你的 AI 就在<strong>这台电脑</strong>上跑起来并接进服务器。
+      </p>
+      <label class="field">
+        服务器地址
+        <input id="bridge-server" type="text" placeholder="https://...">
+      </label>
+      <label class="field">
+        钥匙
+        <input id="bridge-key" type="text" placeholder="NEST-AI-xxxxxxxx">
+      </label>
+      <div class="row">
+        <button class="primary" id="btn-bridge">启动我的 AI</button>
+        <button class="ghost" id="btn-bridge-stop" hidden>停止</button>
+      </div>
+      <p class="status" id="bridge-status">未启动</p>
+      <p class="hint">需要这台电脑装好 DSH，并且启用口令里列的插件。没有 DSH 的话 AI 会连不上。</p>
+    </article>
+  </section>
+
+  <section class="logs">
+    <div class="log-tabs">
+      <button data-log="server" class="on">服务器日志</button>
+      <button data-log="bridge">AI 日志</button>
+      <button class="ghost small" id="btn-back">← 回到开始页</button>
+    </div>
+    <pre id="log-view"></pre>
+  </section>
+
+  <footer class="foot">
+    <span>开源 · MIT · <a href="#" id="link-repo">GitHub</a></span>
+    <span id="core-info"></span>
+  </footer>
+</div>
+<script src="app.js"></script>
+</body>
+</html>
