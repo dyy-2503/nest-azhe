@@ -2131,6 +2131,11 @@ if (method === 'POST' && p === '/api/extensions/remove') {
   }
 
   if (method === 'GET' && p === '/api/server-info') {
+    // 安卓/iOS 客户端在"自动进入"前会跨域探活一下这个端点，所以给它放开 CORS。
+    // 这里只有端口、局域网地址、注册模式这类公开信息，不含任何凭据。
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+    res.setHeader('Cache-Control', 'no-store');
     const nets = os.networkInterfaces();
     const lan = [];
     for (const list of Object.values(nets)) {

@@ -7,7 +7,16 @@
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
-<main class="wrap">
+
+<!-- 自动进入时的过渡页 -->
+<section class="entering" id="entering" hidden>
+  <img class="logo" src="icon.png" alt="">
+  <p class="entering-title">正在进入 Nest</p>
+  <p class="entering-url" id="entering-url"></p>
+</section>
+
+<!-- 地址页（只在没有默认服务器/连不上时出现） -->
+<main class="wrap" id="main" hidden>
   <div class="brand">
     <img class="logo" src="icon.png" alt="">
     <div>
@@ -21,7 +30,8 @@
       服务器地址
       <input id="url" type="url" inputmode="url" placeholder="https://nest-xxx.ts.net" required>
     </label>
-    <p class="hint">找群主要这个地址。如果他在同一个 Wi-Fi 下，也可能是一个 http://192.168.x.x:8787 的地址。</p>
+    <p class="hint">找群主要这个地址。如果你们在同一个 Wi-Fi，也可能是 <code>http://192.168.x.x:8787</code>。</p>
+    <p class="hint err" id="hint-offline" hidden>连不上这个地址。检查：地址对不对、服务器那台电脑开着吗、是不是连的是同一个网络。</p>
     <button type="submit" class="primary">进入</button>
   </form>
 
@@ -30,8 +40,13 @@
     <div id="recent-list"></div>
   </div>
 
-  <p class="foot">只和 AI 聊天 · 朋友之间不开口子</p>
+  <p class="foot">
+    只和 AI 聊天 · 朋友之间不开口子 ·
+    <a href="#" id="switch-server">换一个服务器</a>
+  </p>
 </main>
+
+<script src="config.js"></script>
 <script src="app.js"></script>
 </body>
 </html>
