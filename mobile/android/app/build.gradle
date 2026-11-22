@@ -1,25 +1,49 @@
+// Nest 安卓客户端 · gradle 配置（Capacitor 生成，已改：固定侧载签名 + 版本号跟随 package.json）
+
 apply plugin: 'com.android.application'
+
+// 版本号跟随 mobile/package.json（避免 APK 里永远是 "1.0"）
+def pkg = new groovy.json.JsonSlurper().parseText(file('../../package.json').text)
+def versionParts = (pkg.version ?: '0.0.0').tokenize('.').collect { it.replaceAll(/[^0-9].*/, '') as int }
+def verName = pkg.version ?: '0.0.0'
+def verCode = (versionParts[0] ?: 0) * 10000 + (versionParts[1] ?: 0) * 100 + (versionParts[2] ?: 0)
 
 android {
     namespace "app.nest.chat"
     compileSdk rootProject.ext.compileSdkVersion
+
     defaultConfig {
         applicationId "app.nest.chat"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 1
-        versionName "1.0"
+        versionCode verCode
+        versionName verName
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
-             // Default: https://android.googlesource.com/platform/frameworks/base/+/282e181b58cf72b6ca770dc7ca5f91f135444502/tools/aapt/AaptAssets.cpp#61
             ignoreAssetsPattern '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
+
+    // 固定签名：CI 每个 runner 生成的 debug key 都不同，导致"覆盖安装失败（签名不一致）"。
+    // 这里用一个随仓库分发的侧载密钥，保证每次构建签名一致，用户能直接升级。
+    signingConfigs {
+        sideload {
+            storeFile file('../../nest-sideload.keystore')
+            storePassword System.getenv('NEST_KEYSTORE_PASS') ?: 'nest-sideload'
+            keyAlias System.getenv('NEST_KEY_ALIAS') ?: 'nest'
+            keyPassword System.getenv('NEST_KEY_PASS') ?: 'nest-sideload'
+        }
+    }
+
     buildTypes {
+        debug {
+            signingConfig signingConfigs.sideload
+        }
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+            signingConfig signingConfigs.sideload
         }
     }
 }
