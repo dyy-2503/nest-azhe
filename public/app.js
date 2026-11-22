@@ -1428,7 +1428,7 @@ function openStarmap(member) {
         <button type="button" id="sm-refresh">刷新</button>
         <button type="button" id="sm-close">关闭</button>
       </div>
-      <iframe id="sm-frame" src="/api/ai/${member.id}/starmap" title="记忆星图"></iframe>
+      <iframe id="sm-frame" src="/starmap.html?ai=${member.id}" title="记忆星图"></iframe>
     </div>`;
   document.body.appendChild(mask);
   const bar = mask.querySelector('.starmap-bar');
@@ -3660,9 +3660,11 @@ async function finishVoice() {
 /* ---- 用户名片（点头像弹出来，照 QQ 那样）---- */
 
 let cardEl = null;
+let maskEl = null;
 let longPressFired = false;   // 长按已经弹过菜单，抑制随后的 click
 
 function closeUserCard() {
+  if (maskEl) { maskEl.remove(); maskEl = null; }
   if (cardEl) { cardEl.remove(); cardEl = null; }
 }
 
@@ -3683,6 +3685,12 @@ async function openUserCard(userId, anchor) {
   const canAsk = u.kind === 'agent' && info.relation === 'coworker';
   const isMineAi = info.isOwner && u.kind === 'agent' && Number(u.id) !== Number(state.me.id);
 
+  // 手机点空白经常被列表滚动吃掉，名片就关不掉。
+  // 外面套一层全屏透明遮罩：点遮罩任意位置都关。
+  const mask = document.createElement('div');
+  mask.className = 'usercard-mask';
+  mask.addEventListener('click', (e) => { if (e.target === mask) closeUserCard(); });
+
   const card = document.createElement('div');
   card.className = 'usercard';
   card.innerHTML = `
@@ -3701,8 +3709,19 @@ async function openUserCard(userId, anchor) {
       ${isMineAi ? '<button type="button" data-uc="profile">看资料</button>' : ''}
       <button type="button" data-uc="copy">复制 @ID</button>
     </div>`;
-  document.body.appendChild(card);
+  mask.appendChild(card);
+  document.body.appendChild(mask);
+  maskEl = mask;
   cardEl = card;
+
+  // 右上角关闭按钮（手机上遮罩够用，但给个明确的 × 更放心）
+  const closeBtn = document.createElement('button');
+  closeBtn.type = 'button';
+  closeBtn.className = 'uc-close';
+  closeBtn.setAttribute('aria-label', '关闭');
+  closeBtn.textContent = '×';
+  closeBtn.addEventListener('click', closeUserCard);
+  card.appendChild(closeBtn);
 
   // 摆在头像旁边，别跑出屏幕
   const r = anchor.getBoundingClientRect();

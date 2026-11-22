@@ -1,0 +1,520 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,maximum-scale=1,user-scalable=no">
+<title>记忆星图</title>
+<style>
+  :root {
+    --bg: #04060f;
+    --ink: #dfe8ff;
+    --dim: #8fa3c8;
+    --line: #1b2540;
+    --accent: #4d9cff;
+    --safe-b: env(safe-area-inset-bottom, 0px);
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body {
+    margin: 0; height: 100%; overflow: hidden;
+    background: radial-gradient(120% 90% at 50% 0%, #0a1226 0%, var(--bg) 55%);
+    color: var(--ink);
+    font: 14px/1.5 -apple-system, "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+    touch-action: none;
+    user-select: none;
+  }
+  canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+
+  /* 顶部标题 */
+  .top {
+    position: fixed; left: 14px; top: calc(10px + env(safe-area-inset-top, 0px));
+    right: 14px; pointer-events: none;
+  }
+  .top h1 { margin: 0; font-size: 17px; font-weight: 600; letter-spacing: .3px; }
+  .top .sub { margin-top: 3px; font-size: 11.5px; color: var(--dim); }
+
+  /* 底部工具条：搜索 + 提示 */
+  .bottom {
+    position: fixed; left: 12px; right: 12px;
+    bottom: calc(10px + var(--safe-b));
+    display: flex; flex-direction: column; gap: 8px;
+  }
+  .row { display: flex; gap: 8px; align-items: center; }
+  .search {
+    flex: 1; min-width: 0;
+    background: rgba(20, 30, 52, .82);
+    border: 1px solid var(--line);
+    border-radius: 11px;
+    color: var(--ink); font-size: 13px;
+    padding: 10px 12px;
+    outline: none;
+    backdrop-filter: blur(8px);
+    touch-action: auto;
+  }
+  .search::placeholder { color: #6d7f9f; }
+  .search:focus { border-color: #34507f; }
+  .chip {
+    flex: 0 0 auto;
+    background: rgba(20, 30, 52, .82);
+    border: 1px solid var(--line);
+    border-radius: 11px;
+    color: var(--dim); font-size: 12.5px;
+    padding: 10px 12px;
+    touch-action: manipulation;
+  }
+  .chip:active { background: #1b2743; }
+  .hint {
+    font-size: 11px; color: #6d7f9f;
+    text-align: center; line-height: 1.4;
+  }
+
+  /* 图例（默认收起） */
+  .legend {
+    position: fixed; right: 12px; bottom: calc(112px + var(--safe-b));
+    background: rgba(14, 21, 38, .92);
+    border: 1px solid var(--line);
+    border-radius: 11px;
+    padding: 9px 11px;
+    font-size: 11.5px; color: #9db0d2;
+    display: none;
+    backdrop-filter: blur(8px);
+  }
+  .legend.on { display: block; }
+  .legend div { display: flex; align-items: center; gap: 7px; margin: 3px 0; }
+  .legend i { width: 8px; height: 8px; border-radius: 50%; flex: 0 0 auto; }
+
+  /* 底部详情卡 */
+  .sheet {
+    position: fixed; left: 0; right: 0; bottom: 0;
+    max-height: 62%;
+    background: rgba(10, 16, 30, .97);
+    border-top: 1px solid var(--line);
+    border-radius: 16px 16px 0 0;
+    padding: 12px 16px calc(16px + var(--safe-b));
+    transform: translateY(110%);
+    transition: transform .22s ease;
+    display: flex; flex-direction: column;
+    backdrop-filter: blur(12px);
+    z-index: 10;
+  }
+  .sheet.on { transform: translateY(0); }
+  .sheet-grab {
+    width: 38px; height: 4px; border-radius: 2px;
+    background: #2b3a5c; margin: 0 auto 10px;
+  }
+  .sheet-head { display: flex; gap: 10px; align-items: flex-start; }
+  .sheet-title { flex: 1; font-size: 14.5px; font-weight: 600; line-height: 1.45; word-break: break-word; }
+  .sheet-x {
+    flex: 0 0 auto; width: 28px; height: 28px; border-radius: 50%;
+    border: 0; background: rgba(255,255,255,.07); color: var(--dim);
+    font-size: 16px; line-height: 1;
+  }
+  .meta { margin-top: 8px; color: var(--dim); font-size: 12px; display: flex; flex-wrap: wrap; gap: 6px 12px; }
+  .sect { margin: 12px 0 6px; font-size: 12px; color: #8fa3c8; }
+  .rel { max-height: 30vh; overflow-y: auto; -webkit-overflow-scrolling: touch; touch-action: pan-y; }
+  .rel button {
+    display: block; width: 100%; text-align: left;
+    background: rgba(255,255,255,.045); border: 1px solid transparent;
+    border-radius: 9px; color: var(--ink);
+    font-size: 12.5px; line-height: 1.45;
+    padding: 9px 11px; margin-bottom: 6px;
+  }
+  .rel button:active { border-color: #34507f; background: rgba(77,156,255,.12); }
+  .empty { color: #6d7f9f; font-size: 12.5px; padding: 10px 0; }
+</style>
+</head>
+<body>
+<canvas id="cv"></canvas>
+
+<div class="top">
+  <h1>记忆星图</h1>
+  <div class="sub" id="sub">加载中…</div>
+</div>
+
+<div class="bottom">
+  <div class="row">
+    <input id="q" class="search" placeholder="搜一条记忆" autocomplete="off" enterkeyhint="search">
+    <button class="chip" id="btn-legend" type="button">图例</button>
+  </div>
+  <div class="hint">单指拖动旋转 · 双指缩放 · 点星星看详情</div>
+</div>
+
+<div class="legend" id="legend"></div>
+
+<div class="sheet" id="sheet">
+  <div class="sheet-grab"></div>
+  <div class="sheet-head">
+    <div class="sheet-title" id="s-title"></div>
+    <button class="sheet-x" id="s-x" type="button" aria-label="关闭">×</button>
+  </div>
+  <div class="meta" id="s-meta"></div>
+  <div class="sect">相连的记忆 <span id="s-count"></span></div>
+  <div class="rel" id="s-rel"></div>
+</div>
+
+<script>
+(() => {
+  const ai = Number(new URLSearchParams(location.search).get('ai') || 0);
+  const TOPIC_COLOR = {
+    qq: '#4d9cff', douyin: '#ff6fa5', dsh: '#54d28a', memory: '#ffd166',
+    misc: '#9aa7c2', wechat: '#5ad1c8',
+  };
+  const TOPIC_NAME = {
+    qq: 'QQ', douyin: '抖音', dsh: 'DSH', memory: '记忆', misc: '其他', wechat: '微信',
+  };
+
+  const cv = document.getElementById('cv');
+  const ctx = cv.getContext('2d');
+  const subEl = document.getElementById('sub');
+  const sheet = document.getElementById('sheet');
+  const sTitle = document.getElementById('s-title');
+  const sMeta = document.getElementById('s-meta');
+  const sRel = document.getElementById('s-rel');
+  const sCount = document.getElementById('s-count');
+  const qEl = document.getElementById('q');
+  const legendEl = document.getElementById('legend');
+
+  let DATA = null;
+  let nodes = [];          // { n, x, y, z(单位球), sx, sy, r, color }
+  let edges = [];          // { a, b, w }
+  let byId = new Map();    // id -> nodes 索引
+  let rotX = -0.18, rotY = 0.5, zoom = 1;
+  let W = 0, H = 0, DPR = 1;
+  let selected = -1;
+  let lastProjected = [];
+
+  /* ---------------- 尺寸 ---------------- */
+  function resize() {
+    DPR = Math.min(2.5, window.devicePixelRatio || 1);
+    W = cv.clientWidth; H = cv.clientHeight;
+    cv.width = Math.round(W * DPR);
+    cv.height = Math.round(H * DPR);
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    draw();
+  }
+  window.addEventListener('resize', () => { resize(); });
+  window.addEventListener('orientationchange', () => setTimeout(resize, 200));
+
+  /* ---------------- 数据 ---------------- */
+  async function load() {
+    try {
+      const r = await fetch(`/api/ai/${ai}/starmap-data`, { credentials: 'same-origin' });
+      if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || `HTTP ${r.status}`);
+      DATA = await r.json();
+    } catch (err) {
+      subEl.textContent = '星图打不开：' + (err.message || err);
+      return;
+    }
+    const raw = Array.isArray(DATA.nodes) ? DATA.nodes : [];
+    byId = new Map();
+    nodes = raw.map((n, i) => {
+      const len = Math.hypot(n.x, n.y, n.z) || 1;
+      const node = {
+        n,
+        x: n.x / len, y: n.y / len, z: n.z / len,
+        sx: 0, sy: 0, r: 0,
+        color: TOPIC_COLOR[n.topic] || TOPIC_COLOR.misc,
+      };
+      byId.set(n.id, i);
+      return node;
+    });
+    edges = (DATA.edges || [])
+      .map((e) => ({ a: byId.get(e.source), b: byId.get(e.target), w: Number(e.weight) || 0.2 }))
+      .filter((e) => e.a != null && e.b != null);
+
+    const topics = new Map();
+    for (const nd of nodes) {
+      const t = nd.n.topic || 'misc';
+      topics.set(t, (topics.get(t) || 0) + 1);
+    }
+    legendEl.innerHTML = [...topics.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .map(([t, c]) => `<div><i style="background:${TOPIC_COLOR[t] || TOPIC_COLOR.misc}"></i>${TOPIC_NAME[t] || t} · ${c}</div>`)
+      .join('');
+
+    subEl.textContent = `${nodes.length} 颗记忆 · ${edges.length} 条可见连接`;
+    resize();
+  }
+
+  /* ---------------- 投影 ---------------- */
+  function project() {
+    const base = Math.min(W, H) * 0.42 * zoom;
+    const cosY = Math.cos(rotY), sinY = Math.sin(rotY);
+    const cosX = Math.cos(rotX), sinX = Math.sin(rotX);
+    lastProjected = nodes.map((nd, i) => {
+      // 先绕 Y 轴，再绕 X 轴
+      let x = nd.x * cosY - nd.z * sinY;
+      let z = nd.x * sinY + nd.z * cosY;
+      let y = nd.y * cosX - z * sinX;
+      z = nd.y * sinX + z * cosX;
+      // 透视：z 越大越远
+      const persp = 1 / Math.max(0.35, 1 + z * 0.42);
+      const sx = W / 2 + x * base * persp;
+      const sy = H / 2 + y * base * persp;
+      const depth = (1 - z) / 2;                    // 0 远 1 近
+      const r = Math.max(1.8, Math.min(9, (nd.n.size || 10) * 0.055 * (0.55 + depth * 0.9) * zoom));
+      nd.sx = sx; nd.sy = sy; nd.r = r;
+      return { i, sx, sy, r, depth, z, color: nd.color, bright: Number(nd.n.brightness) || 0.5 };
+    });
+    return lastProjected;
+  }
+
+  /* ---------------- 绘制 ---------------- */
+  function draw() {
+    if (!nodes.length) {
+      ctx.clearRect(0, 0, W, H);
+      return;
+    }
+    const proj = project();
+    ctx.clearRect(0, 0, W, H);
+
+    // 背景星尘
+    ctx.save();
+    for (let i = 0; i < 60; i++) {
+      const x = ((i * 97) % 101) / 101 * W;
+      const y = ((i * 53) % 97) / 97 * H;
+      ctx.globalAlpha = 0.06 + (i % 5) * 0.012;
+      ctx.fillStyle = '#9fc0ff';
+      ctx.fillRect(x, y, 1.4, 1.4);
+    }
+    ctx.restore();
+
+    // 连接线
+    ctx.lineWidth = 1;
+    for (const e of edges) {
+      const a = proj[e.a], b = proj[e.b];
+      if (!a || !b) continue;
+      const isSel = selected >= 0 && (e.a === selected || e.b === selected);
+      ctx.strokeStyle = isSel ? 'rgba(120,190,255,.75)' : 'rgba(120,160,230,.16)';
+      ctx.lineWidth = isSel ? 1.5 : Math.max(0.5, Math.min(1.2, e.w * 1.6));
+      ctx.beginPath();
+      ctx.moveTo(a.sx, a.sy);
+      ctx.lineTo(b.sx, b.sy);
+      ctx.stroke();
+    }
+
+    // 星星：远的先画
+    const order = [...proj].sort((p, q) => p.depth - q.depth);
+    for (const p of order) {
+      const glow = ctx.createRadialGradient(p.sx, p.sy, 0, p.sx, p.sy, p.r * 3.4);
+      glow.addColorStop(0, hexA(p.color, 0.85 * (0.45 + p.depth * 0.55)));
+      glow.addColorStop(1, hexA(p.color, 0));
+      ctx.fillStyle = glow;
+      ctx.beginPath();
+      ctx.arc(p.sx, p.sy, p.r * 3.4, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.fillStyle = hexA('#ffffff', 0.55 + p.depth * 0.45);
+      ctx.beginPath();
+      ctx.arc(p.sx, p.sy, Math.max(1.2, p.r * 0.52), 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // 选中环
+    if (selected >= 0 && proj[selected]) {
+      const p = proj[selected];
+      ctx.strokeStyle = 'rgba(160,210,255,.95)';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(p.sx, p.sy, p.r * 2.2 + 4, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+
+    // 只给最亮的几颗标名字，避免糊成一片
+    const labelable = proj
+      .filter((p) => p.depth > 0.5)
+      .sort((a, b) => b.bright - a.bright)
+      .slice(0, 4);
+    if (selected >= 0 && proj[selected] && !labelable.includes(proj[selected])) labelable.unshift(proj[selected]);
+    ctx.font = '11px -apple-system, "PingFang SC", system-ui, sans-serif';
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'top';
+    const placed = [];
+    for (const p of labelable) {
+      const t = nodes[p.i].n.label || '';
+      const short = t.length > 13 ? t.slice(0, 13) + '…' : t;
+      const w = ctx.measureText(short).width;
+      let x = Math.max(6, Math.min(W - w - 6, p.sx - w / 2));
+      let y = p.sy + p.r * 2.4;
+      if (y + 16 > H - 96) y = Math.max(34, p.sy - p.r * 2.4 - 17);   // 底部留给工具条
+      // 简单防重叠：和已放好的标签压一起就往下挪
+      for (let guard = 0; guard < 6; guard++) {
+        const hit = placed.find((q) => Math.abs(q.y - y) < 15 && x < q.x + q.w + 6 && x + w + 6 > q.x);
+        if (!hit) break;
+        y += 17;
+      }
+      if (y + 16 > H - 96) continue;
+      placed.push({ x, y, w });
+      ctx.fillStyle = p.i === selected ? 'rgba(20,40,80,.85)' : 'rgba(4,6,15,.62)';
+      ctx.fillRect(x - 3, y, w + 6, 16);
+      ctx.fillStyle = p.i === selected ? '#cfe4ff' : 'rgba(190,210,240,.8)';
+      ctx.fillText(short, x, y + 2);
+    }
+  }
+
+  function hexA(hex, a) {
+    const h = hex.replace('#', '');
+    const v = h.length === 3 ? h.split('').map((c) => c + c).join('') : h;
+    const n = parseInt(v, 16);
+    return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`;
+  }
+
+  /* ---------------- 手势 ---------------- */
+  let touches = new Map();
+  let dragStart = null;
+  let pinchStart = null;
+  let moved = 0;
+
+  cv.addEventListener('touchstart', (e) => {
+    for (const t of e.changedTouches) touches.set(t.identifier, { x: t.clientX, y: t.clientY });
+    moved = 0;
+    if (touches.size === 1) {
+      const t = [...touches.values()][0];
+      dragStart = { x: t.x, y: t.y, rotX, rotY };
+      pinchStart = null;
+    } else if (touches.size === 2) {
+      const [a, b] = [...touches.values()];
+      pinchStart = { d: Math.hypot(a.x - b.x, a.y - b.y), zoom };
+      dragStart = null;
+    }
+    e.preventDefault();
+  }, { passive: false });
+
+  cv.addEventListener('touchmove', (e) => {
+    for (const t of e.changedTouches) if (touches.has(t.identifier)) touches.set(t.identifier, { x: t.clientX, y: t.clientY });
+    if (touches.size === 1 && dragStart) {
+      const t = [...touches.values()][0];
+      const dx = t.x - dragStart.x, dy = t.y - dragStart.y;
+      moved = Math.max(moved, Math.hypot(dx, dy));
+      rotY = dragStart.rotY + dx * 0.008;
+      rotX = Math.max(-1.35, Math.min(1.35, dragStart.rotX - dy * 0.008));
+      draw();
+    } else if (touches.size === 2 && pinchStart) {
+      const [a, b] = [...touches.values()];
+      const d = Math.hypot(a.x - b.x, a.y - b.y);
+      if (d > 10) {
+        zoom = Math.max(0.45, Math.min(3.2, pinchStart.zoom * (d / pinchStart.d)));
+        moved = 99;
+        draw();
+      }
+    }
+    e.preventDefault();
+  }, { passive: false });
+
+  cv.addEventListener('touchend', (e) => {
+    const remaining = touches.size - e.changedTouches.length;
+    for (const t of e.changedTouches) touches.delete(t.identifier);
+    if (remaining <= 0) {
+      if (moved < 10) pickNearest(e.changedTouches[0]);
+      dragStart = null; pinchStart = null; touches.clear();
+    }
+    e.preventDefault();
+  }, { passive: false });
+
+  // 桌面调试也能用鼠标拖
+  cv.addEventListener('mousedown', (e) => { dragStart = { x: e.clientX, y: e.clientY, rotX, rotY }; moved = 0; });
+  window.addEventListener('mousemove', (e) => {
+    if (!dragStart) return;
+    const dx = e.clientX - dragStart.x, dy = e.clientY - dragStart.y;
+    moved = Math.max(moved, Math.hypot(dx, dy));
+    rotY = dragStart.rotY + dx * 0.008;
+    rotX = Math.max(-1.35, Math.min(1.35, dragStart.rotX - dy * 0.008));
+    draw();
+  });
+  window.addEventListener('mouseup', (e) => {
+    if (!dragStart) return;
+    if (moved < 6) pickNearest({ clientX: e.clientX, clientY: e.clientY });
+    dragStart = null;
+  });
+
+  function pickNearest(pt) {
+    if (!pt) return;
+    const rect = cv.getBoundingClientRect();
+    const x = pt.clientX - rect.left, y = pt.clientY - rect.top;
+    let best = -1, bestD = 30;
+    for (const p of lastProjected) {
+      const d = Math.hypot(p.sx - x, p.sy - y);
+      if (d < Math.max(bestD * 0.55, p.r + 16) && d < bestD + p.r) { best = p.i; bestD = d; }
+    }
+    if (best >= 0) select(best);
+    else closeSheet();
+  }
+
+  /* ---------------- 选中 / 详情 ---------------- */
+  function select(i) {
+    selected = i;
+    const nd = nodes[i].n;
+    sTitle.textContent = nd.label || nd.id;
+    const bits = [];
+    if (nd.topic) bits.push(`<span style="color:${TOPIC_COLOR[nd.topic] || TOPIC_COLOR.misc}">${TOPIC_NAME[nd.topic] || nd.topic}</span>`);
+    if (nd.created) bits.push(`记于 ${String(nd.created).slice(0, 10)}`);
+    if (nd.age_days != null) bits.push(`${Math.max(1, Math.round(Number(nd.age_days)))} 天前`);
+    if (nd.emotion != null) bits.push(`情绪 ${Number(nd.emotion).toFixed(2)}`);
+    if (nd.strength != null) bits.push(`强度 ${Math.round(Number(nd.strength) * 100)}%`);
+    sMeta.innerHTML = bits.join(' · ');
+
+    const rels = edges
+      .filter((e) => e.a === i || e.b === i)
+      .sort((a, b) => b.w - a.w)
+      .slice(0, 12)
+      .map((e) => {
+        const other = e.a === i ? e.b : e.a;
+        const label = nodes[other].n.label || nodes[other].n.id;
+        return { other, label, w: e.w };
+      });
+    sCount.textContent = `(${rels.length})`;
+    sRel.innerHTML = rels.length
+      ? rels.map((r) => `<button type="button" data-i="${r.other}">${escapeHtml(r.label)}<span style="color:#6d7f9f"> · ${Math.round(r.w * 100)}%</span></button>`).join('')
+      : '<div class="empty">这颗星星还很孤单</div>';
+
+    sheet.classList.add('on');
+    draw();
+  }
+
+  sRel.addEventListener('click', (e) => {
+    const b = e.target.closest('button[data-i]');
+    if (b) select(Number(b.dataset.i));
+  });
+  document.getElementById('s-x').addEventListener('click', closeSheet);
+  function closeSheet() {
+    sheet.classList.remove('on');
+    selected = -1;
+    draw();
+  }
+
+  /* ---------------- 搜索 ---------------- */
+  qEl.addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter') return;
+    qEl.blur();
+    const q = qEl.value.trim().toLowerCase();
+    if (!q) return;
+    let best = -1, bestScore = 0;
+    nodes.forEach((nd, i) => {
+      const t = String(nd.n.label || nd.n.id).toLowerCase();
+      let score = 0;
+      if (t === q) score = 3;
+      else if (t.includes(q)) score = 2;
+      else {
+        // 逐字包含，给个弱匹配
+        let c = 0;
+        for (const ch of q) if (t.includes(ch)) c++;
+        score = (c / q.length) > 0.75 ? 1 : 0;
+      }
+      if (score > bestScore) { bestScore = score; best = i; }
+    });
+    if (best >= 0) select(best);
+    else subEl.textContent = '没搜到「' + qEl.value.trim() + '」';
+  });
+
+  /* ---------------- 图例 ---------------- */
+  document.getElementById('btn-legend').addEventListener('click', () => legendEl.classList.toggle('on'));
+
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  }
+
+  resize();
+  load();
+})();
+</script>
+</body>
+</html>

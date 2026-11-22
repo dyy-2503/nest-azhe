@@ -1993,7 +1993,25 @@ if (method === 'POST' && p === '/api/extensions/remove') {
     return;
   }
 
-  // 刷新：跑一遍 nmem 导出 → 计算坐标 → 生成 html
+  // 手机端星图：只给数据。页面是我们自己的 /starmap.html（触摸手势那套），
+// 桌面版那页有滚轮/双击/Esc，手机上不该直接复用。
+if (method === 'GET' && /^\/api\/ai\/(\d+)\/starmap-data$/.test(p)) {
+  const me = requireUser(req);
+  const aiId = Number(/^\/api\/ai\/(\d+)\/starmap-data$/.exec(p)[1]);
+  const ai = get('SELECT * FROM users WHERE id = ? AND kind = ?', aiId, 'agent');
+  if (!ai || Number(ai.owner_id) !== Number(me.id)) return json(res, 403, { error: '只有它的主人能看' });
+
+  const file = join(homedir(), '.dsh', 'nmem', 'starmap.html');
+  if (!existsSync(file)) return json(res, 404, { error: '还没有星图，先点右上角刷新' });
+  const html = readFileSync(file, 'utf8');
+  const m = /const DATA = (\{[\s\S]*?\});\s*\n/.exec(html);
+  if (!m) return json(res, 500, { error: '星图文件里没找到数据' });
+  let data;
+  try { data = JSON.parse(m[1]); } catch { return json(res, 500, { error: '星图数据解析失败' }); }
+  return json(res, 200, data);
+}
+
+// 刷新：跑一遍 nmem 导出 → 计算坐标 → 生成 html
   if (method === 'POST' && starmapOf(p) && starmapOf(p)[2]) {
     const me = requireUser(req);
     const aiId = Number(starmapOf(p)[1]);

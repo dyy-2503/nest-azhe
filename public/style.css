@@ -1,4 +1,4 @@
-/* Nest 样式表
+﻿/* Nest 样式表
    设计语言取自 QQNT 9.9 的实测素材：主色 #0099FF、在线 #0EB845、未读 #FF0044、提醒 #FFA715。
    布局按 QQ 9.9 三栏：56px 左轨 / 268px 会话列表 / 自适应聊天区。
 */
@@ -1788,10 +1788,10 @@ body.list-collapsed { --list-w: 0px; }
 }
 
 /* ---- 星图 ---- */
-.starmap-mask { padding: 12px; }
+.starmap-mask { padding: 8px; }
 .starmap-box {
   width: min(1100px, 96vw);
-  height: min(760px, 92vh);
+  height: min(760px, 92dvh);
   background: #04060f;
   border-radius: 12px;
   overflow: hidden;
@@ -2639,3 +2639,28 @@ html, body { overscroll-behavior: none; }
   cursor: pointer;
 }
 .wiz-more:hover { border-color: var(--accent); color: var(--accent); }
+
+/* ---- 名片遮罩（手机点空白关不掉的问题）---- */
+.usercard-mask {
+  position: fixed;
+  inset: 0;
+  z-index: 120;
+  background: transparent;
+}
+.usercard { z-index: 121; }
+.uc-close {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, .06);
+  color: var(--text-3);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+}
+.uc-close:hover { background: rgba(0, 0, 0, .12); color: var(--text); }
