@@ -97,25 +97,6 @@ function probe(url) {
   });
 }
 
-/* ------------------------------ 自动进入 ------------------------------ */
-
-async function autoEntry() {
-  const last = normalize(localStorage.getItem(KEY_LAST) || '');
-  const target = last || normalize(preset);
-  if (!target) return false;
-
-  $('#entering').hidden = false;
-  $('#entering-url').textContent = target;
-
-  const result = await probe(target);
-  if (result.ok) {
-    go(target);
-    return true;
-  }
-  showAddressPage(result.reason, target);
-  return true;
-}
-
 /* ------------------------------ 地址页 ------------------------------ */
 
 function renderRecent() {
@@ -176,11 +157,16 @@ $('#switch-server').addEventListener('click', (e) => {
 
 /* ------------------------------ 启动 ------------------------------ */
 
-(async function boot() {
-  $('#main').hidden = true;
-  const handled = await autoEntry();
-  if (!handled) {
-    showAddressPage('');
-    if (preset) $('#url').value = normalize(preset);
+(function boot() {
+  // 有服务器地址就直接跳，不做探活：
+  // 探活会白白多等几秒（手机走代理时尤其慢），而 WebView 自己会显示加载/报错。
+  const target = normalize(localStorage.getItem(KEY_LAST) || '') || normalize(preset);
+  if (target) {
+    $('#entering').hidden = false;
+    $('#entering-url').textContent = target;
+    // 下一帧再跳，先把"正在进入"渲染出来，避免白屏闪烁
+    requestAnimationFrame(() => setTimeout(() => go(target), 30));
+    return;
   }
+  showAddressPage('');
 })();

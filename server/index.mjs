@@ -3,6 +3,7 @@
 // EventSource 自带重连，省掉 WebSocket 那套握手/心跳/重连代码，够 50 人的圈子用。
 import http from 'node:http';
 import https from 'node:https';
+import { gzipSync } from 'node:zlib';
 import os from 'node:os';
 import { homedir } from 'node:os';
 import { execFile } from 'node:child_process';
@@ -472,7 +473,7 @@ async function serveBridge(res) {
   pipeFile(res, file);
 }
 
-async function serveStatic(res, pathname) {
+async function serveStatic(req, res, pathname) {
   const rel = pathname === '/' ? 'index.html' : pathname.replace(/^\/+/, '');
   const target = normalize(join(PUBLIC_DIR, rel));
   if (!target.startsWith(PUBLIC_DIR + sep)) {
@@ -504,10 +505,38 @@ async function serveStatic(res, pathname) {
       return res.end(buf);
     }
 
+    // 带 ?v= 的 js/css 是"版本化 URL"（HTML 里按 mtime 生成），可以放心长缓存：
+    // 手机每次打开 App 就不用再为这 260KB 走一遍慢网络；文件一改 URL 就变，不会读到旧版。
+    const ext2 = extname(target).toLowerCase();
+    const versioned = /[?&]v=/.test(req.url || '');
+    const longCache = versioned && (ext2 === '.js' || ext2 === '.css');
+    const assetCache = longCache
+      ? 'public, max-age=31536000, immutable'
+      : ext2 === '.png' || ext2 === '.ico' || ext2 === '.webmanifest'
+        ? 'public, max-age=86400'
+        : 'no-cache';
+    const mime = EXT_MIME[ext2] || 'application/octet-stream';
+    const isText = /^text\//.test(mime) || /\.(js|css|json|webmanifest|svg)$/i.test(target);
+    const acceptGzip = /\bgzip\b/i.test(String(req.headers['accept-encoding'] || ''));
+    if (isText && acceptGzip && st.size > 1024) {
+      // 文本资源压缩后再发：手机通过隧道访问时这一项收益最大（196KB → ~50KB）
+      const raw = await readFile(target);
+      const gz = gzipSync(raw, { level: 6 });
+      res.writeHead(200, {
+        'content-type': mime,
+        'content-encoding': 'gzip',
+        'content-length': gz.length,
+        'cache-control': assetCache,
+        'last-modified': new Date(st.mtimeMs).toUTCString(),
+        etag: `"${st.mtimeMs.toString(36)}-gz"`,
+        vary: 'Accept-Encoding',
+      });
+      return res.end(gz);
+    }
     res.writeHead(200, {
-      'content-type': EXT_MIME[extname(target).toLowerCase()] || 'application/octet-stream',
+      'content-type': mime,
       'content-length': st.size,
-      'cache-control': 'no-cache',
+      'cache-control': assetCache,
       'last-modified': new Date(st.mtimeMs).toUTCString(),
       etag: `"${st.mtimeMs.toString(36)}"`,
     });
@@ -2423,7 +2452,7 @@ async function handler(req, res) {
       return await handleAdmin(req, res, url, currentUser(req));
     }
     if (url.pathname.startsWith('/media/')) return await serveMedia(req, res, url.pathname.slice(7));
-    return await serveStatic(res, url.pathname);
+    return await serveStatic(req, res, url.pathname);
   } catch (err) {
     const code = err.code && Number.isInteger(err.code) ? err.code : 500;
     if (code === 500) console.error('[nest]', err);
