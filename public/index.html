@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Nest</title>
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+
+<div id="app" hidden>
+  <!-- 左轨 -->
+  <aside class="rail">
+    <div class="rail-me" title="我">
+      <div class="avatar av-me" id="me-avatar">?</div>
+      <span class="status-dot" id="me-dot"></span>
+    </div>
+
+    <nav class="rail-nav">
+      <button class="rail-btn is-on" data-tip="消息" id="nav-message">
+        <svg viewBox="0 0 24 24"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3h11A2.5 2.5 0 0 1 20 5.5v8a2.5 2.5 0 0 1-2.5 2.5H9l-4.2 3.2A.7.7 0 0 1 3.7 18.6V5.5Z"/></svg>
+        <i class="badge" id="rail-badge" hidden></i>
+      </button>
+      <button class="rail-btn" data-tip="联系人" id="nav-contact">
+        <svg viewBox="0 0 24 24"><path d="M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm7.5 1a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM2 20c0-3.3 3.1-6 7-6s7 2.7 7 6H2Zm15.2 0c-.3-2-1.4-3.7-3-4.8.7-.1 1.3-.2 1.8-.2 3.3 0 6 2.2 6 5h-4.8Z"/></svg>
+      </button>
+      <button class="rail-btn" data-tip="设置" id="btn-settings">
+        <svg viewBox="0 0 24 24"><path d="M12 15.5A3.5 3.5 0 1 0 12 8.5a3.5 3.5 0 0 0 0 7Zm8.4-2.1.1-1.4-.1-1.4 2-1.5-2-3.4-2.3 1a7.6 7.6 0 0 0-2.4-1.4L15.3 2h-4l-.4 2.4c-.9.3-1.7.8-2.4 1.4l-2.3-1-2 3.4 2 1.5L6.1 12l.1 1.4-2 1.5 1.9 3.4 2.3-1c.7.6 1.5 1.1 2.4 1.4l.4 2.4h4l.4-2.4c.9-.3 1.7-.8 2.4-1.4l2.3 1 2-3.4-2-1.5Z"/></svg>
+      </button>
+    </nav>
+
+    <div class="rail-foot">
+      <button class="rail-btn" data-tip="退出" id="btn-logout">
+        <svg viewBox="0 0 24 24"><path d="M10 3H6a3 3 0 0 0-3 3v12a3 3 0 0 0 3 3h4v-2H6a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h4V3Zm6.6 4.6L15.2 9l2 2H9v2h8.2l-2 2 1.4 1.4L21 12l-4.4-4.4Z"/></svg>
+      </button>
+    </div>
+  </aside>
+
+  <!-- 会话列表 -->
+  <section class="list-pane">
+    <!-- 手机上左侧栏被隐藏，导航搬到这里 -->
+    <div class="mobile-nav">
+      <button type="button" class="mn-btn is-on" id="mn-msg">消息</button>
+      <button type="button" class="mn-btn" id="mn-contact">联系人</button>
+      <button type="button" class="mn-btn mn-icon" id="mn-settings" title="设置">
+        <svg viewBox="0 0 24 24"><path d="M12 15.5A3.5 3.5 0 1 0 12 8.5a3.5 3.5 0 0 0 0 7Zm8.4-2.1.1-1.4-.1-1.4 2-1.5-2-3.4-2.3 1a7.6 7.6 0 0 0-2.4-1.4L15.3 2h-4l-.4 2.4c-.9.3-1.7.8-2.4 1.4l-2.3-1-2 3.4 2 1.5L6.1 12l.1 1.4-2 1.5 1.9 3.4 2.3-1c.7.6 1.5 1.1 2.4 1.4l.4 2.4h4l.4-2.4c.9-.3 1.7-.8 2.4-1.4l2.3 1 2-3.4-2-1.5Z"/></svg>
+      </button>
+    </div>
+    <div class="list-top">
+      <label class="search">
+        <svg viewBox="0 0 24 24"><path d="M10.5 3a7.5 7.5 0 1 0 4.6 13.4l4.2 4.3 1.4-1.4-4.2-4.2A7.5 7.5 0 0 0 10.5 3Zm0 2a5.5 5.5 0 1 1 0 11 5.5 5.5 0 0 1 0-11Z"/></svg>
+        <input id="search" placeholder="搜索" autocomplete="off">
+      </label>
+      <button class="icon-btn" id="btn-new-group" title="新建群">
+        <svg viewBox="0 0 24 24"><path d="M11 5h2v6h6v2h-6v6h-2v-6H5v-2h6V5Z"/></svg>
+      </button>
+      <button class="icon-btn list-close" id="btn-list-close" title="关闭列表">
+        <svg viewBox="0 0 24 24"><path d="m6.7 5.3 6 6 6-6 1.4 1.4-6 6 6 6-1.4 1.4-6-6-6 6-1.4-1.4 6-6-6-6 1.4-1.4Z"/></svg>
+      </button>
+    </div>
+    <div class="conv-list" id="conv-list"></div>
+    <div class="conv-list" id="contact-list" hidden></div>
+    <div class="list-foot"><span id="conn" class="conn">连接中…</span></div>
+  </section>
+
+  <!-- 聊天区 -->
+  <section class="chat-pane">
+    <header class="chat-head">
+      <button class="icon-btn" id="btn-list" title="收起/展开会话列表">
+        <svg viewBox="0 0 24 24"><path d="M3 5h18v2H3V5Zm0 6h18v2H3v-2Zm0 6h18v2H3v-2Z"/></svg>
+      </button>
+      <div class="chat-title">
+        <h1 id="chat-name">选一个会话</h1>
+        <span id="chat-sub" class="chat-sub"></span>
+      </div>
+      <div class="chat-actions">
+        <button class="icon-btn" id="btn-select" title="多选消息">
+          <svg viewBox="0 0 24 24"><path d="M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4L9 16.2Z"/></svg>
+        </button>
+        <button class="icon-btn" id="btn-search" title="搜索聊天记录">
+          <svg viewBox="0 0 24 24"><path d="M10.5 3a7.5 7.5 0 0 1 5.96 12.05l4.25 4.24-1.42 1.42-4.24-4.25A7.5 7.5 0 1 1 10.5 3Zm0 2a5.5 5.5 0 1 0 0 11 5.5 5.5 0 0 0 0-11Z"/></svg>
+        </button>
+        <button class="icon-btn" id="btn-members" title="成员">
+          <svg viewBox="0 0 24 24"><path d="M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm0 2c-3.9 0-7 2.7-7 6h14c0-3.3-3.1-6-7-6Zm8-1a3 3 0 1 0 0-6 3 3 0 0 0 0 6Zm.6 2c-.6 0-1.2.1-1.7.3A7.9 7.9 0 0 1 18 19h4c0-2.6-2-4.8-4.4-5Z"/></svg>
+        </button>
+        <button class="icon-btn" id="btn-more" title="更多">
+          <svg viewBox="0 0 24 24"><path d="M6 10a2 2 0 1 0 0 4 2 2 0 0 0 0-4Zm6 0a2 2 0 1 0 0 4 2 2 0 0 0 0-4Zm6 0a2 2 0 1 0 0 4 2 2 0 0 0 0-4Z"/></svg>
+        </button>
+      </div>
+    </header>
+
+    <div class="messages" id="messages">
+      <div class="empty-hint">
+        <p>左边选一个会话</p>
+      </div>
+    </div>
+
+    <div class="composer" id="composer">
+      <div class="reply-bar" id="reply-bar" hidden>
+        <span class="rb-text"></span>
+        <button type="button" id="reply-cancel" title="取消回复">×</button>
+      </div>
+      <div class="pending" id="pending" hidden></div>
+      <div class="composer-toolbar">
+        <button data-act="emoji" title="表情">😊</button>
+        <button data-act="image" title="图片">
+          <svg viewBox="0 0 24 24"><path d="M4 5h16a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1Zm1 2v9.6l4.6-4.6 3.2 3.2 2.4-2.4L19 15.4V7H5Zm3 2.2a1.6 1.6 0 1 0 0 3.2 1.6 1.6 0 0 0 0-3.2Z"/></svg>
+        </button>
+        <button data-act="voice" title="语音（演示）">🎤</button>
+        <button data-act="file" title="文件">
+          <svg viewBox="0 0 24 24"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8l-5-5Zm0 2.4L16.6 8H14V5.4Z"/></svg>
+        </button>
+      </div>
+      <textarea id="input" rows="1" placeholder="输入消息，Enter 发送 · Shift+Enter 换行" autocomplete="off"></textarea>
+      <div class="composer-foot">
+        <span class="typing" id="typing"></span>
+        <button id="send" class="send" disabled>发送</button>
+      </div>
+      <div class="emoji-panel" id="emoji-panel" hidden></div>
+    </div>
+  </section>
+</div>
+
+<!-- 登录 -->
+<div id="login" class="login">
+  <form class="login-card" id="login-form">
+    <div class="login-brand">
+      <div class="login-logo">N</div>
+      <div>
+        <h1>Nest</h1>
+        <p>自己的群，自己的人。</p>
+      </div>
+    </div>
+    <div class="login-tabs">
+      <button type="button" class="on" data-tab="login">登录</button>
+      <button type="button" data-tab="register">注册</button>
+      <button type="button" data-tab="recover">忘记密码</button>
+    </div>
+    <div class="login-fields" data-pane="login">
+      <label>手机号<input name="account" autocomplete="username" placeholder="11 位手机号" inputmode="numeric"></label>
+      <label>密码<input name="password" type="password" autocomplete="current-password" placeholder="你的密码"></label>
+    </div>
+    <div class="login-fields" data-pane="register" hidden>
+      <label id="lbl-invite" hidden>邀请码<input name="invite" placeholder="找群主要一个，例如 NEST-1A2B3C" autocomplete="off" style="text-transform:uppercase"></label>
+      <label>手机号<input name="phone" placeholder="11 位手机号" inputmode="numeric" maxlength="11"></label>
+      <label>昵称<input name="nickname" placeholder="群里显示的名字" maxlength="16"></label>
+      <label>密码<input name="rpassword" type="password" placeholder="至少 6 位" autocomplete="new-password"></label>
+      <label>密保一
+        <select name="q1" id="sel-q1"></select>
+        <input name="a1" placeholder="答案（忘了密码时用）">
+      </label>
+      <label>密保二
+        <select name="q2" id="sel-q2"></select>
+        <input name="a2" placeholder="答案">
+      </label>
+    </div>
+    <div class="login-fields" data-pane="recover" hidden>
+      <label>手机号<input name="rphone" placeholder="注册时用的手机号" inputmode="numeric" maxlength="11"></label>
+      <button type="button" class="login-sub" id="btn-load-q">下一步：回答密保问题</button>
+      <div id="recover-qa" hidden>
+        <label id="lbl-q1">密保一<input name="ra1" placeholder="答案"></label>
+        <label id="lbl-q2">密保二<input name="ra2" placeholder="答案"></label>
+        <label>新密码<input name="newpw" type="password" placeholder="至少 6 位" autocomplete="new-password"></label>
+      </div>
+    </div>
+    <p class="login-error" id="login-error"></p>
+    <button class="login-submit" type="submit" id="login-submit">进入</button>
+    <p class="login-hint" id="login-hint"></p>
+  </form>
+</div>
+
+<script type="module" src="/app.js"></script>
+
+<!-- 设置浮层 -->
+<div class="popover" id="settings-popover" hidden>
+  <div class="pop-head">
+    <div class="avatar" id="set-avatar">?</div>
+    <div class="pop-meta">
+      <b id="set-name">—</b>
+      <small id="set-handle">@—</small>
+    </div>
+  </div>
+  <button class="pop-item" id="set-theme">
+    <span>外观</span><span class="pop-hint" id="set-theme-hint">浅色</span>
+  </button>
+  <div class="pop-item" id="set-ai">
+    <span>AI</span><span class="pop-hint" id="set-ai-hint">—</span>
+  </div>
+  <button class="pop-item" id="set-ai-manage">
+    <span>我的 AI</span><span class="pop-hint" id="set-ai-count">—</span>
+  </button>
+  <button class="pop-item" id="set-invite">
+    <span>邀请码</span><span class="pop-hint" id="set-invite-hint">—</span>
+  </button>
+  <button class="pop-item" id="set-join">
+    <span>加入群聊</span><span class="pop-hint">用群邀请码</span>
+  </button>
+  <button class="pop-item" id="set-addfriend">
+    <span>加好友</span><span class="pop-hint" id="set-friend-hint">手机号</span>
+  </button>
+  <button class="pop-item" id="set-remote">
+    <span>远程地址</span><span class="pop-hint" id="set-remote-hint">未开启</span>
+  </button>
+  <button class="pop-item" id="set-logout"><span>退出登录</span></button>
+</div>
+
+</body>
+</html>

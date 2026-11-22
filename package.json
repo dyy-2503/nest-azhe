@@ -1,0 +1,25 @@
+{
+  "name": "nest",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "自建群聊：仿 QQ 9.9 三栏结构 + AI 原生成员。零运行时依赖。",
+  "engines": {
+    "node": ">=22.5"
+  },
+  "scripts": {
+    "start": "node --no-warnings scripts/start.mjs",
+    "serve": "node --no-warnings server/index.mjs",
+    "supervise": "node --no-warnings scripts/supervise.mjs",
+    "selftest": "node --no-warnings scripts/selftest.mjs",
+    "e2e": "node --no-warnings scripts/e2e.mjs",
+    "backup": "node --no-warnings scripts/maintain.mjs --backup-only",
+    "maintain": "node --no-warnings scripts/maintain.mjs",
+    "seed": "node --no-warnings server/seed.mjs",
+    "reset": "node --no-warnings server/seed.mjs --reset",
+    "tunnel": "node --no-warnings scripts/tunnel.mjs",
+    "supervise:tunnel": "node --no-warnings scripts/supervise.mjs --tunnel",
+    "tunnel:restart": "node --no-warnings scripts/tunnel-restart.mjs",
+    "package": "node --no-warnings scripts/package.mjs"
+  }
+}
