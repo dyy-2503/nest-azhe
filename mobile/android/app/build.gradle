@@ -1,4 +1,4 @@
-﻿// Nest 安卓客户端 · gradle 配置（Capacitor 生成，已改：固定侧载签名 + 版本号跟随 package.json）
+// Nest 安卓客户端 · gradle 配置（Capacitor 生成，已改：固定侧载签名 + 版本号跟随 package.json）
 
 apply plugin: 'com.android.application'
 

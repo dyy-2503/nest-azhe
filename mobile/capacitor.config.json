@@ -8,6 +8,7 @@
     "captureInput": true
   },
   "server": {
-    "androidScheme": "https"
+    "androidScheme": "https",
+    "allowNavigation": ["*"]
   }
 }
