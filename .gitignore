@@ -32,3 +32,12 @@ coverage/
 desktop/node_modules/
 desktop/dist/
 desktop/release/
+
+# 安卓构建产物（android 工程本身要提交，产物不提交）
+mobile/node_modules/
+mobile/android/.gradle/
+mobile/android/build/
+mobile/android/app/build/
+mobile/android/local.properties
+mobile/out/
+mobile/www/icon.png

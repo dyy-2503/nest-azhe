@@ -3,6 +3,9 @@ name: desktop
 # 桌面客户端（Electron）构建
 #   - 手动触发：只在 CI 上验证能不能打出安装包
 #   - tag 触发：打出 Windows 安装包并挂到对应 Release
+#
+# 代码签名：如果仓库里配了 WIN_CSC_LINK / WIN_CSC_KEY_PASSWORD 两个 secret，
+# electron-builder 会自动签名；没配就跳过（会弹 SmartScreen，见 docs/SIGNING.md）。
 on:
   push:
     tags: ['v*']
@@ -17,6 +20,10 @@ jobs:
     defaults:
       run:
         working-directory: desktop
+    env:
+      # 签名（可选）：把 PFX 转成 base64 存进 secret 即可，无需改代码
+      CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
+      CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
     steps:
       - uses: actions/checkout@v4
 
@@ -35,6 +42,18 @@ jobs:
 
       - name: 打包安装程序
         run: npx electron-builder --win nsis --x64
+
+      - name: 检查签名状态
+        shell: pwsh
+        run: |
+          $exe = Get-ChildItem dist/Nest-Setup-*.exe | Select-Object -First 1
+          $sig = Get-AuthenticodeSignature $exe.FullName
+          Write-Host "签名状态: $($sig.Status)"
+          if ("${{ secrets.WIN_CSC_LINK }}" -ne "") {
+            if ($sig.Status -ne 'Valid') { throw "配了签名 secret 但产物没签名: $($sig.Status)" }
+          } else {
+            Write-Host "未配置签名证书，跳过（安装时会弹 SmartScreen，属预期）"
+          }
 
       - name: 上传构建产物
         uses: actions/upload-artifact@v4

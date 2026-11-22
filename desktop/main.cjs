@@ -115,6 +115,7 @@ function createWindow() {
     minHeight: 620,
     backgroundColor: '#f7f8fa',
     title: 'Nest',
+    ...(app.isPackaged ? {} : { icon: join(__dirname, 'build', 'icon.ico') }),
     autoHideMenuBar: true,
     webPreferences: {
       preload: join(__dirname, 'preload.cjs'),

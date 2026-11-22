@@ -1,0 +1,13 @@
+{
+  "appId": "app.nest.chat",
+  "appName": "Nest",
+  "webDir": "www",
+  "bundledWebRuntime": false,
+  "android": {
+    "allowMixedContent": true,
+    "captureInput": true
+  },
+  "server": {
+    "androidScheme": "https"
+  }
+}
