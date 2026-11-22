@@ -33,6 +33,16 @@ jobs:
           node-version: '22'
 
       - uses: android-actions/setup-android@v3
+        continue-on-error: true
+
+      - name: 确认 Android SDK
+        run: |
+          echo "ANDROID_HOME=$ANDROID_HOME"
+          echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT"
+          which sdkmanager || true
+          yes | sdkmanager --licenses > /dev/null 2>&1 || true
+          sdkmanager "platform-tools" "platforms;android-35" "build-tools;35.0.0" > /dev/null 2>&1 || true
+          ls "$ANDROID_SDK_ROOT/platforms" || true
 
       - name: 安装依赖
         run: npm install --no-audit --no-fund
