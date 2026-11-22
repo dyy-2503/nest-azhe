@@ -21,7 +21,8 @@ const STAGE = join(DIST, `nest-v${version}`);
 const OUT = join(DIST, `nest-v${version}.zip`);
 
 // 需要进包的东西
-const INCLUDE = ['server', 'public', 'bridge', 'scripts', 'docs', 'vendor', 'package.json', 'README.md', 'LICENSE', 'start.cmd', 'install.cmd', 'start.sh', '.gitignore'];
+// 注意：不带 docs/（那是开发/部署文档，几 MB 截图；仓库里能看到）
+const INCLUDE = ['server', 'public', 'bridge', 'scripts', 'vendor', 'package.json', 'README.md', 'LICENSE', 'start.cmd', 'install.cmd', 'start.sh', '.gitignore'];
 // 这些文件/目录绝不进包（密钥、用户数据、本地状态）
 const EXCLUDE = [
   'bridge/nest-me.json',

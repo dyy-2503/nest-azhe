@@ -1,19 +1,19 @@
 {
-  "name": "nest-mobile",
-  "version": "0.3.0",
-  "private": true,
-  "description": "Nest 安卓客户端：填服务器地址就能用（WebView 壳）",
-  "license": "MIT",
-  "scripts": {
-    "sync": "cap sync android",
-    "open": "cap open android",
-    "build": "cd android && gradlew.bat assembleDebug"
-  },
-  "dependencies": {
-    "@capacitor/android": "^7.0.0",
-    "@capacitor/core": "^7.0.0"
-  },
-  "devDependencies": {
-    "@capacitor/cli": "^7.0.0"
-  }
+    "name":  "nest-mobile",
+    "version":  "0.3.1",
+    "private":  true,
+    "description":  "Nest 安卓客户端：填服务器地址就能用（WebView 壳）",
+    "license":  "MIT",
+    "scripts":  {
+                    "sync":  "cap sync android",
+                    "open":  "cap open android",
+                    "build":  "cd android \u0026\u0026 gradlew.bat assembleDebug"
+                },
+    "dependencies":  {
+                         "@capacitor/android":  "^7.0.0",
+                         "@capacitor/core":  "^7.0.0"
+                     },
+    "devDependencies":  {
+                            "@capacitor/cli":  "^7.0.0"
+                        }
 }
