@@ -4395,6 +4395,55 @@ function initList() {
 
 /* --------------------------------- 事件 --------------------------------- */
 
+  /* ---- 是不是在 App 壳里 ----
+     远程页面（服务器地址）里 hostname 不是 localhost，只能靠 Capacitor 桥判断；
+     桥没注入时用「能不能加载 https://localhost 的图标」兜底探测。 */
+  let inAppShellCache = null;
+  function isInAppShell() {
+    if (inAppShellCache !== null) return inAppShellCache;
+    const cap = window.Capacitor;
+    if (cap && typeof cap.isNativePlatform === 'function' && cap.isNativePlatform()) {
+      inAppShellCache = true;
+      mountServerButton();
+      return true;
+    }
+    inAppShellCache = false;
+    const probe = new Image();
+    const timer = setTimeout(() => { probe.onload = probe.onerror = null; }, 1500);
+    probe.onload = () => { clearTimeout(timer); inAppShellCache = true; mountServerButton(); };
+    probe.onerror = () => { clearTimeout(timer); };
+    probe.src = 'https://localhost/icon.png?_=' + Date.now();
+    return false;
+  }
+
+  // 聊天页右下的「服务器」按钮：一键回地址页换服务器
+  function mountServerButton() {
+    if (document.getElementById('app-server-btn')) return;
+    const b = document.createElement('button');
+    b.id = 'app-server-btn';
+    b.type = 'button';
+    b.textContent = '服务器';
+    b.title = '换一个服务器';
+    Object.assign(b.style, {
+      position: 'fixed',
+      right: '10px',
+      bottom: 'calc(104px + env(safe-area-inset-bottom, 0px))',
+      zIndex: 900,
+      padding: '7px 11px',
+      borderRadius: '999px',
+      background: 'rgba(20, 30, 52, .82)',
+      color: '#cfdcff',
+      border: '1px solid #2b3a5c',
+      fontSize: '12px',
+      lineHeight: '1.2',
+      boxShadow: '0 4px 14px rgba(0,0,0,.25)',
+    });
+    b.addEventListener('click', () => {
+      location.href = 'https://localhost/index.html?switch=1';
+    });
+    document.body.appendChild(b);
+  }
+
 function bind() {
   // 会话切换
   $('#conv-list').addEventListener('click', (e) => {
@@ -4741,6 +4790,7 @@ function bind() {
 
   // 设置浮层
   $('#btn-settings').addEventListener('click', toggleSettings);
+isInAppShell();
 
   // 远程地址：隧道跑起来后显示公网 URL，点一下复制发给朋友
   $('#set-remote')?.addEventListener('click', async () => {
@@ -4978,7 +5028,7 @@ function bind() {
   // 用群邀请码进群
   // App 壳里（https://localhost）才显示：回到地址页换服务器。
   // 浏览器里没有这个壳，点了会 404，所以只在本机壳里出现。
-  if (location.protocol === 'https:' && location.hostname === 'localhost') {
+  if (isInAppShell()) {
     const sw = $('#set-switch-server');
     if (sw) {
       sw.hidden = false;
