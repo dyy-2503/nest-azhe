@@ -1,4 +1,4 @@
-// Nest 安卓客户端 · gradle 配置（Capacitor 生成，已改：固定侧载签名 + 版本号跟随 package.json）
+﻿// Nest 安卓客户端 · gradle 配置（Capacitor 生成，已改：固定侧载签名 + 版本号跟随 package.json）
 
 apply plugin: 'com.android.application'
 
@@ -29,7 +29,7 @@ android {
     // 这里用一个随仓库分发的侧载密钥，保证每次构建签名一致，用户能直接升级。
     signingConfigs {
         sideload {
-            storeFile file('../../nest-sideload.keystore')
+            storeFile file('../nest-sideload.keystore')
             storePassword System.getenv('NEST_KEYSTORE_PASS') ?: 'nest-sideload'
             keyAlias System.getenv('NEST_KEY_ALIAS') ?: 'nest'
             keyPassword System.getenv('NEST_KEY_PASS') ?: 'nest-sideload'
