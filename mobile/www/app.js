@@ -158,6 +158,12 @@ $('#switch-server').addEventListener('click', (e) => {
 /* ------------------------------ 启动 ------------------------------ */
 
 (function boot() {
+  // 从聊天页点「换一个服务器」回来：清掉上次的地址，停在地址页
+  if (/[?&]switch=1/.test(location.search)) {
+    try { localStorage.removeItem(KEY_LAST); } catch { /* ignore */ }
+    showAddressPage('');
+    return;
+  }
   // 有服务器地址就直接跳，不做探活：
   // 探活会白白多等几秒（手机走代理时尤其慢），而 WebView 自己会显示加载/报错。
   const target = normalize(localStorage.getItem(KEY_LAST) || '') || normalize(preset);

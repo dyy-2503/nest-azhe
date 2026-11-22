@@ -4976,6 +4976,18 @@ function bind() {
   $('#btn-more').addEventListener('click', () => openGroupPanel().catch(() => {}));
 
   // 用群邀请码进群
+  // App 壳里（https://localhost）才显示：回到地址页换服务器。
+  // 浏览器里没有这个壳，点了会 404，所以只在本机壳里出现。
+  if (location.protocol === 'https:' && location.hostname === 'localhost') {
+    const sw = $('#set-switch-server');
+    if (sw) {
+      sw.hidden = false;
+      sw.addEventListener('click', () => {
+        location.href = 'https://localhost/index.html?switch=1';
+      });
+    }
+  }
+
   $('#set-join').addEventListener('click', async () => {
     $('#settings-popover').hidden = true;
     const code = await openTextPrompt({
