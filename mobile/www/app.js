@@ -22,6 +22,41 @@ function normalize(input) {
   try { return new URL(url).origin; } catch { return ''; }
 }
 
+/** 一个输入框里可以写多个地址（空格、逗号、换行都行），自动挑能连上的 */
+function splitTargets(raw) {
+  return [...new Set(String(raw || '').split(/[\s,，;；]+/).map(normalize).filter(Boolean))];
+}
+
+/** 快速探活：只用来在「局域网 / 公网」之间选路，超时很短，连不上就当没这条 */
+function fastProbe(url, ms = 1500) {
+  return new Promise((resolve) => {
+    let done = false;
+    const finish = (ok) => {
+      if (done) return;
+      done = true;
+      clearTimeout(timer);
+      resolve(ok);
+    };
+    const timer = setTimeout(() => finish(false), ms);
+    try {
+      fetch(url + '/api/server-info', { cache: 'no-store' })
+        .then((r) => finish(r.ok))
+        .catch(() => finish(false));
+    } catch {
+      finish(false);
+    }
+  });
+}
+
+/** 并行测一遍，快的先到；都连不上返回第一个（交给 WebView 自己报错，返回键能救） */
+async function pickFastest(targets) {
+  const list = targets.filter(Boolean);
+  if (list.length <= 1) return list[0] || '';
+  const results = await Promise.all(list.map(async (u) => ({ u, ok: await fastProbe(u) })));
+  const hit = results.find((r) => r.ok);
+  return hit ? hit.u : list[0];
+}
+
 function loadHistory() {
   try {
     const list = JSON.parse(localStorage.getItem(KEY) || '[]');
@@ -29,11 +64,13 @@ function loadHistory() {
   } catch { return []; }
 }
 
-function saveHistory(url) {
-  const list = [url, ...loadHistory().filter((u) => u !== url)].slice(0, 5);
+function saveHistory(targets) {
+  const urls = Array.isArray(targets) ? targets : [targets];
+  const list = [...urls, ...loadHistory().filter((u) => !urls.includes(u))].slice(0, 8);
   try {
     localStorage.setItem(KEY, JSON.stringify(list));
-    localStorage.setItem(KEY_LAST, url);
+    // 「上次用的」记整组，下次启动照样能自动选快的那条
+    localStorage.setItem(KEY_LAST, urls.join(' '));
   } catch { /* ignore */ }
 }
 
@@ -47,10 +84,20 @@ function armEnterWatchdog(url) {
   }, 12000);
 }
 
-function go(url) {
-  saveHistory(url);
-  armEnterWatchdog(url);
-  location.replace(url + '/');
+/** 进入：可以是多个地址，先挑能连上的那条再跳 */
+async function enterTargets(rawTargets) {
+  const targets = (Array.isArray(rawTargets) ? rawTargets : splitTargets(rawTargets)).filter(Boolean);
+  if (!targets.length) {
+    showAddressPage('地址看起来不对，例如 http://192.168.1.172:8787 或 https://xxx.ts.net');
+    return;
+  }
+  saveHistory(targets);
+  const urlEl = $('#entering-url');
+  if (urlEl && targets.length > 1) urlEl.textContent = '正在挑最快的路…';
+  const target = await pickFastest(targets);
+  if (urlEl) urlEl.textContent = target;
+  armEnterWatchdog(target);
+  location.replace(target + '/');
 }
 
 function showAddressPage(reason, failedUrl) {
@@ -123,18 +170,18 @@ function renderRecent() {
     b.className = 'recent-item';
     b.textContent = url;
     b.addEventListener('click', async () => {
+      // 历史里可能同时还存着局域网地址（同一个服务器的两条路），一起测
+      const group = splitTargets(localStorage.getItem(KEY_LAST) || '');
+      const targets = group.includes(url) ? group : [url];
       b.disabled = true;
       const old = b.textContent;
       b.textContent = '连接中…';
-      let r;
       try {
-        r = await probe(url);
+        await enterTargets(targets);
       } finally {
         b.disabled = false;
         b.textContent = old;
       }
-      if (r.ok) go(url);
-      else { $('#hint-offline').hidden = false; $('#hint-offline').textContent = r.reason + '（也可以点「连不上？直接进」硬进）'; }
     });
     wrap.appendChild(b);
   }
@@ -143,30 +190,22 @@ function renderRecent() {
 $('#form').addEventListener('submit', async (e) => {
   e.preventDefault();
   const input = $('#url');
-  const url = normalize(input.value);
-  if (!url) {
-    input.setCustomValidity('地址看起来不对，例如 https://nest-xxx.ts.net');
+  const targets = splitTargets(input.value);
+  if (!targets.length) {
+    input.setCustomValidity('地址看起来不对，例如 http://192.168.1.172:8787 或 https://xxx.ts.net');
     input.reportValidity();
     return;
   }
   input.setCustomValidity('');
   $('#hint-offline').hidden = true;
 
-  // 隧道慢的时候探活要好几秒，按钮上给个"连接中…"，否则像卡死
   const btn = $('#form').querySelector('button[type="submit"], button');
   const oldText = btn ? btn.textContent : '';
   if (btn) { btn.disabled = true; btn.textContent = '连接中…'; }
-
-  let r;
   try {
-    r = await probe(url);
+    await enterTargets(targets);
   } finally {
     if (btn) { btn.disabled = false; btn.textContent = oldText; }
-  }
-  if (r.ok) go(url);
-  else {
-    $('#hint-offline').hidden = false;
-    $('#hint-offline').textContent = r.reason + '（也可以点「连不上？直接进」硬进）';
   }
 });
 
@@ -175,15 +214,20 @@ $('#url').addEventListener('input', (e) => e.target.setCustomValidity(''));
 /* 直接进入：探活失败也可以硬进（用户自己判断） */
 $('#force-enter').addEventListener('click', (e) => {
   e.preventDefault();
-  const url = normalize($('#url').value) || normalize(preset);
-  if (url) go(url);
+  const targets = splitTargets($('#url').value);
+  const first = targets[0] || splitTargets(preset)[0];
+  if (!first) return;
+  saveHistory(targets.length ? targets : [first]);
+  armEnterWatchdog(first);
+  location.replace(first + '/');
 });
 
 /* 换服务器：清掉"上次用的"，回到地址页 */
 $('#switch-server').addEventListener('click', (e) => {
   e.preventDefault();
-  try { localStorage.removeItem(KEY_LAST); } catch { /* ignore */ }
+  const savedGroup = String(localStorage.getItem(KEY_LAST) || '').trim();
   showAddressPage('');
+  if (savedGroup) $('#url').value = savedGroup;
 });
 
 /* ------------------------------ 启动 ------------------------------ */
@@ -191,19 +235,21 @@ $('#switch-server').addEventListener('click', (e) => {
 (function boot() {
   // 从聊天页点「换一个服务器」回来：清掉上次的地址，停在地址页
   if (/[?&]switch=1/.test(location.search)) {
-    try { localStorage.removeItem(KEY_LAST); } catch { /* ignore */ }
+    // 不清 KEY_LAST：把它预填回输入框（可能是一组地址），用户点「进入」还是整组、照样自动挑快路
+    const savedGroup = String(localStorage.getItem(KEY_LAST) || '').trim();
     showAddressPage('');
+    if (savedGroup) $('#url').value = savedGroup;
     return;
   }
   // 有服务器地址就直接跳，不做探活：
   // 探活会白白多等几秒（手机走代理时尤其慢），而 WebView 自己会显示加载/报错。
-  const target = normalize(localStorage.getItem(KEY_LAST) || '') || normalize(preset);
-  if (target) {
+  const saved = splitTargets(localStorage.getItem(KEY_LAST) || '');
+  const targets = saved.length ? saved : splitTargets(preset);
+  if (targets.length) {
     $('#entering').hidden = false;
-    $('#entering-url').textContent = target;
-    // 下一帧再跳，先把"正在进入"渲染出来，避免白屏闪烁
-    armEnterWatchdog(target);
-    requestAnimationFrame(() => setTimeout(() => go(target), 30));
+    $('#entering-url').textContent = targets.join('  ·  ');
+    // 先渲染"正在进入"，再挑路跳转：多个地址（局域网 + 公网）时自动选能连的、快的
+    requestAnimationFrame(() => setTimeout(() => enterTargets(targets), 30));
     return;
   }
   showAddressPage('');

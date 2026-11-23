@@ -28,9 +28,9 @@
   <form id="form" autocomplete="off">
     <label class="field">
       服务器地址
-      <input id="url" type="url" inputmode="url" placeholder="https://nest-xxx.ts.net" required>
+      <input id="url" type="text" inputmode="url" placeholder="http://192.168.1.172:8787  或  https://nest-xxx.ts.net" required>
     </label>
-    <p class="hint">找群主要这个地址。如果你们在同一个 Wi-Fi，也可能是 <code>http://192.168.x.x:8787</code>。</p>
+    <p class="hint">可以一次写两个地址（空格隔开）：局域网 <code>http://192.168.x.x:8787</code> 在家更快，公网 <code>https://xxx.ts.net</code> 在外面用——会自动挑能连上的那条。</p>
     <p class="hint err" id="hint-offline" hidden>连不上这个地址。检查：地址对不对、服务器那台电脑开着吗、是不是连的是同一个网络。</p>
     <button type="submit" class="primary">进入</button>
     <button type="button" class="ghost" id="force-enter">连不上？直接进</button>

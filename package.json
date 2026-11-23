@@ -1,6 +1,6 @@
 {
     "name":  "nest",
-    "version":  "0.4.6",
+    "version":  "0.4.7",
     "private":  true,
     "type":  "module",
     "description":  "自建群聊：仿 QQ 9.9 三栏结构 + AI 原生成员。零运行时依赖。",
