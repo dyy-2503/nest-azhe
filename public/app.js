@@ -4609,7 +4609,7 @@ function initList() {
       position: 'fixed',
       right: '10px',
       bottom: 'calc(104px + env(safe-area-inset-bottom, 0px))',
-      zIndex: 900,
+      zIndex: 40, // 要压不过模态/设置抽屉（250/300/130），否则会盖在它们上面
       padding: '7px 11px',
       borderRadius: '999px',
       background: 'rgba(20, 30, 52, .82)',
@@ -4625,7 +4625,35 @@ function initList() {
     document.body.appendChild(b);
   }
 
+// 手机上设置浮层是底部抽屉：打开时补一层遮罩，点遮罩关闭（桌面端不变）
+function installPopoverBackdrop() {
+  const pop = document.getElementById('settings-popover');
+  if (!pop) return;
+  const isNarrow = () => matchMedia('(max-width: 520px)').matches;
+  const sync = () => {
+    let bd = document.getElementById('pop-backdrop');
+    const want = !pop.hidden && isNarrow();
+    document.body.classList.toggle('pop-open', !pop.hidden);
+    if (want && !bd) {
+      bd = document.createElement('div');
+      bd.id = 'pop-backdrop';
+      bd.className = 'pop-backdrop';
+      bd.addEventListener('mousedown', (e) => {
+        e.stopPropagation();
+        pop.hidden = true;
+      });
+      document.body.appendChild(bd);
+    } else if (!want && bd) {
+      bd.remove();
+    }
+  };
+  new MutationObserver(sync).observe(pop, { attributes: true, attributeFilter: ['hidden'] });
+  matchMedia('(max-width: 520px)').addEventListener('change', sync);
+  sync();
+}
+
 function bind() {
+  installPopoverBackdrop();
   // 会话切换
   $('#conv-list').addEventListener('click', (e) => {
     const row = e.target.closest('[data-conv]');

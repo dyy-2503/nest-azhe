@@ -2684,3 +2684,85 @@ html, body { overscroll-behavior: none; }
 .conv.is-offline { opacity: .48; }
 .conv.is-offline .tag-world { color: #8a8f99; background: rgba(138, 143, 153, .16); }
 .world-row:last-child { border-bottom: 0 !important; }
+/* ============ 手机端修正（2026-11-23）============
+   1) 设置浮层：手机上从"飘在左边的小卡片"改成底部抽屉（贴安全区、可滚动、带遮罩）
+   2) 多选条：原来 absolute 定位到聊天区上方，实际跑到状态栏里被刘海挡住 → 贴安全区当顶栏
+   3) 头部：标题可省略号，按钮组不参与压缩，窄屏也不会被挤出屏幕 */
+
+@media (max-width: 520px) {
+  /* ---- 1. 设置：底部抽屉 ---- */
+  .popover {
+    left: 0;
+    right: 0;
+    width: auto;
+    bottom: var(--kb, 0px);
+    max-height: 76vh;
+    overflow-y: auto;
+    padding: 10px 12px calc(12px + env(safe-area-inset-bottom, 0px));
+    border: 0;
+    border-radius: 16px 16px 0 0;
+    box-shadow: 0 -10px 40px rgba(10, 20, 40, .22);
+    z-index: 130;
+    overscroll-behavior: contain;
+    animation: nestSheetUp .16s ease-out;
+  }
+  @keyframes nestSheetUp {
+    from { transform: translateY(28px); opacity: .4; }
+    to { transform: none; opacity: 1; }
+  }
+  .pop-head { padding: 4px 4px 12px; }
+  .pop-meta b { font-size: 14.5px; }
+  .pop-item { padding: 13px 10px; font-size: 14.5px; border-radius: 10px; }
+  .pop-hint { font-size: 12.5px; }
+
+  .pop-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(15, 22, 36, .3);
+    z-index: 129;
+    animation: nestFade .16s ease-out;
+  }
+  @keyframes nestFade {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+
+  /* ---- 2. 多选条：贴安全区的顶栏 ---- */
+  .select-bar {
+    position: fixed;
+    left: 0;
+    right: 0;
+    top: env(safe-area-inset-top, 0px);
+    bottom: auto;
+    padding: 8px 12px;
+    border-top: 0;
+    border-bottom: 1px solid var(--line);
+    box-shadow: 0 6px 18px rgba(10, 20, 40, .1);
+    z-index: 140;
+  }
+  .select-bar span { font-size: 13px; }
+  .select-bar button { padding: 7px 14px; font-size: 13px; }
+
+  /* ---- 3. 头部：标题省略、按钮不被挤 ---- */
+  .chat-head { gap: 2px; }
+  .chat-title { min-width: 0; flex: 1; overflow: hidden; }
+  /* 标题优先占位，右侧副标题（成员数/在线数）让位并省略号 */
+  .chat-title h1 {
+    flex: 0 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .chat-sub {
+    flex: 0 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .chat-actions { flex: none; gap: 0; }
+}
+
+/* 设置抽屉/弹层打开时，右下角「服务器」悬浮按钮让位 */
+body.pop-open #app-server-btn { display: none !important; }
