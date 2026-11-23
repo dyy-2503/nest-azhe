@@ -111,7 +111,7 @@ async function chooseRoute(entered) {
   const candidates = [...new Set([...entered, ...loadPool().map((e) => e.u)].map((u) => String(u || '')))].filter(Boolean).slice(0, 8);
   const results = await Promise.all(candidates.map((u) => probeOne(u)));
   const ok = results.filter((r) => r.ok);
-  if (!ok.length) return { url: entered[0] || candidates[0] || '', group: entered };
+  if (!ok.length) return { url: '', group: entered, reachable: false };
 
   // 把这次探到的身份记进池子，下次公网探不通也能归到同一台服务器
   savePool(ok.map((r) => ({ u: r.url, sid: r.sid, host: r.host = r.host || '' })));
@@ -119,7 +119,7 @@ async function chooseRoute(entered) {
   const sameSid = anchor.sid ? ok.filter((r) => r.sid === anchor.sid) : ok;
   const pool = sameSid.length ? sameSid : ok;
   const best = pool.slice().sort((a, b) => a.ms - b.ms)[0];
-  return { url: best.url, group: pool.map((r) => r.url) };
+  return { url: best.url, group: pool.map((r) => r.url), reachable: true };
 }
 
 async function enterTargets(rawTargets) {
@@ -133,7 +133,19 @@ async function enterTargets(rawTargets) {
   savePool([...entered.map((u) => ({ u })), ...loadPool()]);
   const urlEl = $('#entering-url');
   if (urlEl && entered.length > 1) urlEl.textContent = '正在挑最快的路…';
-  const { url, group } = await chooseRoute(entered);
+  const routed = await chooseRoute(entered);
+  const url = routed.url;
+  const group = routed.group;
+  if (!routed.reachable) {
+    // 公网/局域网都探不通：别硬跳到慢地址干等，回地址页并提示用本机世界
+    const localWorld = loadPool().map((e) => e.u).find((u) => isLocalUrl(u));
+    showAddressPage(
+      localWorld
+        ? '那台服务器现在连不上（可能关机了 / 不在同一网络）。可以先用下面「本机世界」：AI 跑在手机上，不需要电脑。'
+        : '现在一台服务器都连不上。检查地址、电脑是否开机、是否在同一网络。'
+    );
+    return;
+  }
   saveHistory(group.length ? group : entered);
   try { localStorage.setItem(KEY_CUR, url); } catch { /* ignore */ }
   if (urlEl) urlEl.textContent = url;
