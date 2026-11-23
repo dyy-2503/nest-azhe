@@ -1,6 +1,8 @@
 package app.nest.chat;
 
+import android.os.SystemClock;
 import android.webkit.WebView;
+import android.widget.Toast;
 
 import com.getcapacitor.Bridge;
 import com.getcapacitor.BridgeActivity;
@@ -8,40 +10,59 @@ import com.getcapacitor.BridgeActivity;
 /**
  * Nest 的安卓壳。
  *
- * 除了 Capacitor 默认行为，这里只加一件事：返回键。
+ * 返回键的规则（都在这一个地方）：
+ *   1. 在任意服务器页面 → 回「换一个服务器」页（不管那个页面是哪个服务器的）
+ *   2. 已经在壳里（地址页 / 正在进入）→ 第一次按回到「换服务器」页并提示，2 秒内再按才退出
  *
- * 为什么不用网页里的按钮？
- * App 在「本地世界」(http://127.0.0.1:8787) 时，Capacitor 不会往这个非允许源的页面里
- * 注入 JS 桥，网页里的「服务器」按钮就挂不出来；而服务器页面（PC 那台）也各有各的
- * 网页版本。返回键是原生能力，不受这些影响：
- *
- *   在任意服务器页面按返回 → 回壳里的「换一个服务器」页
- *   在壳页面（地址页）按返回 → 正常退出 App
+ * 为什么第 2 条这么绕：服务器慢的时候「正在进入 Nest」会停十几秒（ts.net 走隧道
+ * 尤其慢），用户会以为卡死。返回键必须是万能逃生口，不能一按就退出 App。
  */
 public class MainActivity extends BridgeActivity {
 
     /** 壳自带的地址页（带 switch=1 会清掉"上次用过"，停在地址页） */
     private static final String SHELL_SWITCH_URL = "https://localhost/index.html?switch=1";
 
+    /** 上一次按返回的时间，用来实现「再按一次退出」 */
+    private long lastBackAt = 0;
+
     @Override
     public void onBackPressed() {
         Bridge bridge = getBridge();
         WebView webView = bridge != null ? bridge.getWebView() : null;
-        String url = webView != null ? webView.getUrl() : null;
 
-        if (url != null && !isShellPage(url)) {
-            // 当前在某个服务器的网页里：回「换服务器」页，而不是直接退出
-            webView.loadUrl(SHELL_SWITCH_URL);
+        if (webView == null) {
+            super.onBackPressed();
             return;
         }
 
-        super.onBackPressed();
+        String url = webView.getUrl();
+        boolean inShell = url == null || isShellPage(url);
+
+        if (!inShell) {
+            // 在任何服务器页面：回换服务器页，绝不退出
+            webView.loadUrl(SHELL_SWITCH_URL);
+            lastBackAt = 0;
+            return;
+        }
+
+        // 已经在壳里：2 秒内第二次才退出
+        long now = SystemClock.uptimeMillis();
+        if (now - lastBackAt < 2000) {
+            super.onBackPressed();
+            return;
+        }
+        lastBackAt = now;
+        webView.loadUrl(SHELL_SWITCH_URL);
+        Toast.makeText(this, "再按一次退出", Toast.LENGTH_SHORT).show();
     }
 
-    /** 壳自己的页面（地址页 / 正在进入）都跑在 https://localhost 下 */
+    /** 壳自己的页面（地址页 / 正在进入 / 加载失败页）都不是服务器页面 */
     private boolean isShellPage(String url) {
-        return url.startsWith("https://localhost/")
-                || url.startsWith("https://localhost")
-                || url.startsWith("file://");
+        if (url.startsWith("https://localhost")) return true;
+        if (url.startsWith("file://")) return true;
+        // 加载失败时 WebView 会停在 chrome-error:// 或 data: 页面上，也算壳里
+        if (url.startsWith("chrome-error://")) return true;
+        if (url.startsWith("data:")) return true;
+        return false;
     }
 }

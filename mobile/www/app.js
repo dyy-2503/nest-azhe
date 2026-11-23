@@ -10,7 +10,7 @@
 
 const KEY = 'nest.server.urls';
 const KEY_LAST = 'nest.server.last';
-const PROBE_MS = 5000;
+const PROBE_MS = 8000;
 
 const preset = String(window.NEST_DEFAULT_SERVER || '').trim();
 const $ = (sel) => document.querySelector(sel);
@@ -37,8 +37,19 @@ function saveHistory(url) {
   } catch { /* ignore */ }
 }
 
+/** 进入看门狗：导航成功时这个页面会被换掉，定时器随之消失；
+ *  定时器真响了说明还卡在壳页面 → 说明连不上，退回地址页并给出原因。 */
+let enterTimer = null;
+function armEnterWatchdog(url) {
+  clearTimeout(enterTimer);
+  enterTimer = setTimeout(() => {
+    showAddressPage('进不去 ' + url + '：网络不通，或者那台服务器没开机。换个地址，或者点「连不上？直接进」。', url);
+  }, 12000);
+}
+
 function go(url) {
   saveHistory(url);
+  armEnterWatchdog(url);
   location.replace(url + '/');
 }
 
@@ -112,9 +123,18 @@ function renderRecent() {
     b.className = 'recent-item';
     b.textContent = url;
     b.addEventListener('click', async () => {
-      const r = await probe(url);
+      b.disabled = true;
+      const old = b.textContent;
+      b.textContent = '连接中…';
+      let r;
+      try {
+        r = await probe(url);
+      } finally {
+        b.disabled = false;
+        b.textContent = old;
+      }
       if (r.ok) go(url);
-      else { $('#hint-offline').hidden = false; $('#hint-offline').textContent = r.reason; }
+      else { $('#hint-offline').hidden = false; $('#hint-offline').textContent = r.reason + '（也可以点「连不上？直接进」硬进）'; }
     });
     wrap.appendChild(b);
   }
@@ -131,11 +151,22 @@ $('#form').addEventListener('submit', async (e) => {
   }
   input.setCustomValidity('');
   $('#hint-offline').hidden = true;
-  const r = await probe(url);
+
+  // 隧道慢的时候探活要好几秒，按钮上给个"连接中…"，否则像卡死
+  const btn = $('#form').querySelector('button[type="submit"], button');
+  const oldText = btn ? btn.textContent : '';
+  if (btn) { btn.disabled = true; btn.textContent = '连接中…'; }
+
+  let r;
+  try {
+    r = await probe(url);
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = oldText; }
+  }
   if (r.ok) go(url);
   else {
     $('#hint-offline').hidden = false;
-    $('#hint-offline').textContent = r.reason;
+    $('#hint-offline').textContent = r.reason + '（也可以点「连不上？直接进」硬进）';
   }
 });
 
@@ -171,6 +202,7 @@ $('#switch-server').addEventListener('click', (e) => {
     $('#entering').hidden = false;
     $('#entering-url').textContent = target;
     // 下一帧再跳，先把"正在进入"渲染出来，避免白屏闪烁
+    armEnterWatchdog(target);
     requestAnimationFrame(() => setTimeout(() => go(target), 30));
     return;
   }
