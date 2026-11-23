@@ -85,7 +85,8 @@ function savePool(entries) {
 
 
 /** 探一条地址：回来带 sid（服务器身份）和耗时，用来在同服务器的多条路里挑最快 */
-async function probeOne(url, ms = 2500) {
+async function probeOne(rawUrl, ms = 2500) {
+  const url = String(typeof rawUrl === "object" && rawUrl ? rawUrl.u || rawUrl.url || "" : rawUrl || "");
   const started = (typeof performance !== 'undefined' ? performance.now() : Date.now());
   try {
     const ctrl = new AbortController();
@@ -107,7 +108,7 @@ async function probeOne(url, ms = 2500) {
  * 这样在家自动走局域网，出门自动走公网，也不会串到另一台服务器（比如手机本地世界）。
  */
 async function chooseRoute(entered) {
-  const candidates = [...new Set([...entered, ...loadPool()])].slice(0, 8);
+  const candidates = [...new Set([...entered, ...loadPool().map((e) => e.u)].map((u) => String(u || '')))].filter(Boolean).slice(0, 8);
   const results = await Promise.all(candidates.map((u) => probeOne(u)));
   const ok = results.filter((r) => r.ok);
   if (!ok.length) return { url: entered[0] || candidates[0] || '', group: entered };
@@ -122,7 +123,9 @@ async function chooseRoute(entered) {
 }
 
 async function enterTargets(rawTargets) {
-  const entered = (Array.isArray(rawTargets) ? rawTargets : splitTargets(rawTargets)).filter(Boolean);
+  const entered = (Array.isArray(rawTargets) ? rawTargets : splitTargets(rawTargets))
+    .map((u) => String(typeof u === 'object' && u ? u.u || u.url || '' : u || ''))
+    .filter(Boolean);
   if (!entered.length) {
     showAddressPage('地址看起来不对，例如 http://192.168.1.172:8787 或 https://xxx.ts.net');
     return;
@@ -134,6 +137,10 @@ async function enterTargets(rawTargets) {
   saveHistory(group.length ? group : entered);
   try { localStorage.setItem(KEY_CUR, url); } catch { /* ignore */ }
   if (urlEl) urlEl.textContent = url;
+  if (!/^https?:\/\//.test(url)) {
+    showAddressPage('地址解析异常，重新选一次世界');
+    return;
+  }
   armEnterWatchdog(url);
   location.replace(url + '/');
 }
