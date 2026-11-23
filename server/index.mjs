@@ -2214,7 +2214,25 @@ if (method === 'GET' && /^\/api\/ai\/(\d+)\/starmap-data$/.test(p)) {
     return;
   }
 
-  if (method === 'GET' && p === '/api/server-info') {
+  /** 这台服务器的稳定身份：随机生成一次，写在 data/server-id。
+ *  客户端靠它判断「几个地址其实是同一台服务器」，从而自动挑最快的路。 */
+let serverIdCache = '';
+function serverIdOf() {
+  if (serverIdCache) return serverIdCache;
+  const file = join(DATA_DIR, 'server-id');
+  try {
+    if (existsSync(file)) {
+      const v = readFileSync(file, 'utf8').trim();
+      if (/^[a-f0-9]{16}$/.test(v)) { serverIdCache = v; return v; }
+    }
+  } catch { /* ignore */ }
+  const v = randomBytes(8).toString('hex');
+  try { writeFileSync(file, v + '\n', { mode: 0o600 }); } catch { /* ignore */ }
+  serverIdCache = v;
+  return v;
+}
+
+if (method === 'GET' && p === '/api/server-info') {
     // 安卓/iOS 客户端在"自动进入"前会跨域探活一下这个端点，所以给它放开 CORS。
     // 这里只有端口、局域网地址、注册模式这类公开信息，不含任何凭据。
     res.setHeader('Access-Control-Allow-Origin', '*');
@@ -2242,6 +2260,8 @@ if (method === 'GET' && /^\/api\/ai\/(\d+)\/starmap-data$/.test(p)) {
       publicUrl: tunnel ? tunnel.url : '',  // 隧道就绪时给公网地址
       tunnel: tunnel ? { provider: tunnel.provider, since: tunnel.updatedAt } : null,
       tls: USE_TLS,
+      sid: serverIdOf(), // 服务器身份：客户端用它把同一台服务器的多个地址归组、自动挑快路
+      host: os.hostname(), // 机器名：客户端拿来给「世界」起个人话名字
     });
   }
 

@@ -28,16 +28,16 @@
   <form id="form" autocomplete="off">
     <label class="field">
       服务器地址
-      <input id="url" type="text" inputmode="url" placeholder="http://192.168.1.172:8787  或  https://nest-xxx.ts.net" required>
+      <input id="url" type="text" inputmode="url" placeholder="加一个新服务器：http://192.168.x.x:8787 或 https://xxx.ts.net">
     </label>
-    <p class="hint">可以一次写两个地址（空格隔开）：局域网 <code>http://192.168.x.x:8787</code> 在家更快，公网 <code>https://xxx.ts.net</code> 在外面用——会自动挑能连上的那条。</p>
+    <p class="hint">点下面任意一个世界直接进（会自动选快的那条路）。要加新服务器，把地址填在框里再点「进入」。</p>
     <p class="hint err" id="hint-offline" hidden>连不上这个地址。检查：地址对不对、服务器那台电脑开着吗、是不是连的是同一个网络。</p>
     <button type="submit" class="primary">进入</button>
     <button type="button" class="ghost" id="force-enter">连不上？直接进</button>
   </form>
 
   <div class="recent" id="recent" hidden>
-    <p class="label">最近用过</p>
+    <p class="label">选一个世界</p>
     <div id="recent-list"></div>
   </div>
 
