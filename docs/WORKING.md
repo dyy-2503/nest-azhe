@@ -60,3 +60,15 @@
 
 ### 4. 本地世界用 https（为了语音）
 现在本地是 http，浏览器安全上下文缺失 → 录音用不了。需要本地证书。
+
+### 完成记录（2026-11-23 晚）
+- [x] 本地世界 ↔ 服务器世界双向往返：原生返回键（MainActivity.onBackPressed）→ 壳的
+      https://localhost/index.html?switch=1；手机本地世界的网页也更新到最新（含「服务器」按钮）。
+- [x] 本地服务器开机自启：容器里 /root/nest-local/start.sh（幂等）+ 在 DSH 启动时
+      --require 的 /usr/local/share/dsha/dns-compat.cjs 末尾挂钩子 → DSH 一起来就拉起
+      服务器和桥接。钥匙存 data/ai-key.txt。
+      实测：kill 掉服务器+桥接后模拟 DSH 启动，10 秒内自动恢复，AI 正常回话。
+      注意：手机重启后仍需打开一次 DSHA（容器起来才会触发钩子）；DSH 应用本身的
+      "开机自启"权限还没配。
+- [x] 离线包补全 scripts/（server 会 import scripts/lib/dsh.mjs），并加
+      scripts/make-offline-package.mjs 一键打包。

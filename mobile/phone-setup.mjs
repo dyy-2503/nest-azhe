@@ -10,7 +10,7 @@
 // 用法：cd /root/nest-local && node phone-setup.mjs
 
 import { spawn } from 'node:child_process';
-import { mkdirSync, openSync, readFileSync, existsSync } from 'node:fs';
+import { mkdirSync, openSync, readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 
 const ROOT = process.cwd();
@@ -155,6 +155,10 @@ if (!key) {
   console.error('✗ 拿不到钥匙，看接口返回');
   process.exit(1);
 }
+
+// 把钥匙存下来：自启脚本（phone-start.sh）靠它重连桥接，换钥匙时要同步更新
+writeFileSync(join(DATA, 'ai-key.txt'), key, { mode: 0o600 });
+log('  钥匙已存到 data/ai-key.txt（自启脚本会用）');
 
 /* ------------------------------ 4. 桥接 ------------------------------ */
 
