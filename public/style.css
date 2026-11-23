@@ -2664,3 +2664,23 @@ html, body { overscroll-behavior: none; }
   cursor: pointer;
 }
 .uc-close:hover { background: rgba(0, 0, 0, .12); color: var(--text); }
+/* ---- 别的服务器（世界）：列表里的标签和离线态 ---- */
+.tag-world {
+  font-style: normal;
+  font-size: 10px;
+  line-height: 1.4;
+  padding: 0 5px;
+  margin-left: 4px;
+  border-radius: 4px;
+  color: #6b7f9e;
+  background: rgba(107, 127, 158, .14);
+  white-space: nowrap;
+  max-width: 96px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: 1px;
+}
+.conv.is-world .conv-preview { color: var(--text-3); }
+.conv.is-offline { opacity: .48; }
+.conv.is-offline .tag-world { color: #8a8f99; background: rgba(138, 143, 153, .16); }
+.world-row:last-child { border-bottom: 0 !important; }

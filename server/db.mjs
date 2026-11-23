@@ -255,7 +255,19 @@ export const now = () => Date.now();
     PRIMARY KEY (user_id, sha)
   )`);
 
-  db.exec(`CREATE TABLE IF NOT EXISTS announcement_reads (
+  // 别的 Nest 服务器（"世界"）：本地把远端服务器当成一个可挂载的会话来源
+db.exec(`CREATE TABLE IF NOT EXISTS worlds (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  base_url TEXT NOT NULL,
+  account TEXT NOT NULL DEFAULT '',
+  cookie TEXT NOT NULL DEFAULT '',
+  title TEXT NOT NULL DEFAULT '',
+  created_at INTEGER NOT NULL,
+  last_ok_at INTEGER NOT NULL DEFAULT 0,
+  convs_json TEXT NOT NULL DEFAULT ''
+)`);
+
+db.exec(`CREATE TABLE IF NOT EXISTS announcement_reads (
     conv_id INTEGER NOT NULL,
     user_id INTEGER NOT NULL,
     version INTEGER NOT NULL,
@@ -264,7 +276,12 @@ export const now = () => Date.now();
   )`);
 
   // AI 的可选能力（JSON）：记忆 / 情绪 / 主动说话…
-  if (!ucols.some((c) => c.name === 'capabilities')) {
+  // 世界：缓存最后一次成功拿到的会话列表，离线时列表也能灰着显示
+if (!all("PRAGMA table_info(worlds)").some((c) => c.name === 'convs_json')) {
+  db.exec("ALTER TABLE worlds ADD COLUMN convs_json TEXT NOT NULL DEFAULT ''");
+}
+
+if (!ucols.some((c) => c.name === 'capabilities')) {
     db.exec("ALTER TABLE users ADD COLUMN capabilities TEXT NOT NULL DEFAULT ''");
   }
 }

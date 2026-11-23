@@ -22,6 +22,7 @@ const EMOJI = [
 const state = {
   me: null,
   convs: [],
+  worlds: [], // 别的 Nest 服务器（会话列表合并显示）
   activeId: null,
   messages: new Map(),   // convId -> Message[]
   seen: new Set(),       // 已渲染过的 message.id，防重
@@ -172,52 +173,118 @@ function renderRail() {
   document.title = total ? `(${total}) Nest` : 'Nest';
 }
 
+﻿/** 一个本地会话的行（原来是内联在 renderConvList 里） */
+function convRowHtml(c) {
+  const peer = convPeer(c);
+  const isAgent = convIsAgent(c);
+  const avatarUser = c.kind === 'dm'
+    ? { id: peer?.id ?? c.id, nickname: c.title, kind: peer?.kind, avatar: peer?.avatar }
+    : { id: c.id + 100, nickname: c.title, kind: 'group', avatar: c.avatar };
+  const last = c.lastMessage;
+  const preview = last
+    ? (last.senderId === state.me.id && !last.recalledAt ? '我: ' : '') + last.text
+    : '还没有消息';
+  const badge = c.unread > 0
+    ? (c.muted ? '<i class="mute-dot"></i>' : `<i class="unread">${c.unread > 99 ? '99+' : c.unread}</i>`)
+    : '';
+  return `
+    <div class="conv ${c.id === state.activeId ? 'is-active' : ''}" data-conv="${c.id}">
+      ${avatarHtml(avatarUser)}
+      <div class="conv-main">
+        <div class="conv-name">
+          <span>${esc(c.title)}</span>
+          ${isAgent && c.kind === 'dm' ? '<i class="tag-ai">AI</i>' : ''}
+          ${c.pinned ? '<i class="pin-flag">置顶</i>' : ''}
+        </div>
+        <div class="conv-preview">${esc(preview)}</div>
+      </div>
+      <div class="conv-side">
+        <span class="conv-time">${listTime(last?.createdAt)}</span>
+        ${badge}
+      </div>
+    </div>`;
+}
+
+/** 别的服务器上的会话：带世界标签；离线时灰掉、点它只提示 */
+function worldConvRowHtml(world, c) {
+  const offline = world.status !== 'online';
+  const worldName = String(world.title || '').split(' @ ')[0] || '另一个服务器';
+  const preview = c.lastText || '还没有消息';
+  const badge = c.unread > 0 ? `<i class="unread">${c.unread > 99 ? '99+' : c.unread}</i>` : '';
+  return `
+    <div class="conv is-world${offline ? ' is-offline' : ''}" data-world="${world.id}" data-rconv="${c.id}" title="${offline ? esc(world.error || '离线') : esc(world.baseUrl)}">
+      ${avatarHtml({ id: c.id + 9000, nickname: c.title, kind: c.kind === 'group' ? 'group' : 'agent', avatar: c.avatar })}
+      <div class="conv-main">
+        <div class="conv-name">
+          <span>${esc(c.title)}</span>
+          <i class="tag-world">${esc(worldName)}</i>
+        </div>
+        <div class="conv-preview">${esc(preview)}</div>
+      </div>
+      <div class="conv-side">
+        <span class="conv-time">${listTime(c.lastAt)}</span>
+        ${badge}
+      </div>
+    </div>`;
+}
+
 function renderConvList() {
   const box = $('#conv-list');
   const q = state.filter.trim().toLowerCase();
-  const list = state.convs.filter((c) => {
-    if (!q) return true;
-    if (c.title.toLowerCase().includes(q)) return true;
-    return c.members.some((m) => m.nickname.toLowerCase().includes(q));
+
+  const local = state.convs
+    .filter((c) => {
+      if (!q) return true;
+      if (c.title.toLowerCase().includes(q)) return true;
+      return c.members.some((m) => m.nickname.toLowerCase().includes(q));
+    })
+    .map((c) => ({ type: 'local', conv: c, at: c.lastMessage?.createdAt || 0, pinned: !!c.pinned }));
+
+  const remote = [];
+  for (const w of state.worlds || []) {
+    for (const c of w.convs || []) {
+      if (q && !String(c.title || '').toLowerCase().includes(q)) continue;
+      remote.push({ type: 'remote', world: w, conv: c, at: c.lastAt || 0, pinned: false });
+    }
+  }
+
+  const items = [...local, ...remote].sort((a, b) => {
+    if (a.pinned !== b.pinned) return a.pinned ? -1 : 1;
+    return b.at - a.at;
   });
 
-  if (!list.length) {
+  if (!items.length) {
     box.innerHTML = q
       ? '<div class="empty-hint" style="height:120px"><p>没有匹配的会话</p></div>'
       : '<div class="empty-hint" style="height:160px"><p>还没有会话</p><p class="empty-sub">点右上角 ＋ 建个群，或者在设置里用邀请码进群</p></div>';
     return;
   }
 
-  box.innerHTML = list.map((c) => {
-    const peer = convPeer(c);
-    const isAgent = convIsAgent(c);
-    const avatarUser = c.kind === 'dm'
-      ? { id: peer?.id ?? c.id, nickname: c.title, kind: peer?.kind, avatar: peer?.avatar }
-      : { id: c.id + 100, nickname: c.title, kind: 'group', avatar: c.avatar };
-    const last = c.lastMessage;
-    const preview = last
-      ? (last.senderId === state.me.id && !last.recalledAt ? '我: ' : '') + last.text
-      : '还没有消息';
-    const badge = c.unread > 0
-      ? (c.muted ? '<i class="mute-dot"></i>' : `<i class="unread">${c.unread > 99 ? '99+' : c.unread}</i>`)
-      : '';
-    return `
-      <div class="conv ${c.id === state.activeId ? 'is-active' : ''}" data-conv="${c.id}">
-        ${avatarHtml(avatarUser)}
-        <div class="conv-main">
-          <div class="conv-name">
-            <span>${esc(c.title)}</span>
-            ${isAgent && c.kind === 'dm' ? '<i class="tag-ai">AI</i>' : ''}
-            ${c.pinned ? '<i class="pin-flag">置顶</i>' : ''}
-          </div>
-          <div class="conv-preview">${esc(preview)}</div>
-        </div>
-        <div class="conv-side">
-          <span class="conv-time">${listTime(last?.createdAt)}</span>
-          ${badge}
-        </div>
-      </div>`;
-  }).join('');
+  box.innerHTML = items
+    .map((it) => (it.type === 'local' ? convRowHtml(it.conv) : worldConvRowHtml(it.world, it.conv)))
+    .join('');
+}
+
+/** 拉取"世界"（别的 Nest 服务器）的会话，用来合并进列表 */
+async function loadWorlds() {
+  try {
+    const d = await api('/api/worlds');
+    state.worlds = d.worlds || [];
+  } catch {
+    state.worlds = [];
+  }
+
+// 世界（别的服务器）的未读/最后一条会变，每 60 秒静默刷新一次列表
+let refreshWorldsTick = null;
+function startWorldsRefresh() {
+  if (refreshWorldsTick) return;
+  refreshWorldsTick = setInterval(async () => {
+    if (document.hidden) return;
+    await loadWorlds();
+    if (state.tab === 'message') renderConvList();
+    updateWorldsHint();
+  }, 60_000);
+}
 }
 
 function renderHead() {
@@ -1494,6 +1561,105 @@ async function openPersonaEditor(member) {
       toast(err.message || '保存失败');
     }
   });
+}
+
+﻿/* ---- 服务器世界：把别的 Nest 服务器挂进来，会话列表合并显示 ---- */
+async function openWorldsManager() {
+  let worlds = [];
+  try {
+    worlds = (await api('/api/worlds')).worlds || [];
+  } catch (err) {
+    return toast(err.message || '拿不到世界列表');
+  }
+
+  const mask = document.createElement('div');
+  mask.className = 'modal-mask';
+  const statusText = (w) => (w.status === 'online' ? '在线' : w.status === 'need-login' ? '登录失效' : '离线');
+  const errText = (w) => (/fetch failed|ECONN|ENOTFOUND|timed? ?out/i.test(w.error || '') ? '' : (w.error || ''));
+  mask.innerHTML = `
+    <div class="modal" style="width:520px;max-height:82vh">
+      <div class="modal-head"><span>服务器世界</span></div>
+      <div class="modal-body" style="overflow:auto">
+        <div class="ai-tip">把朋友的（或你自己电脑上的）Nest 服务器挂到这儿，它们的会话会合并显示在左边列表里；离线时灰掉，点一下就跳过去。</div>
+        <div id="world-list" style="margin:12px 0">
+          ${worlds.length ? worlds.map((w) => `
+            <div class="world-row" data-wid="${w.id}" style="display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--line)">
+              <div style="flex:1;min-width:0">
+                <div style="font-size:13.5px">${esc(w.title)}</div>
+                <div style="font-size:11.5px;color:var(--text-3)">${esc(w.baseUrl)} · ${statusText(w)}${errText(w) ? ' · ' + esc(errText(w)) : ''}</div>
+              </div>
+              <button type="button" class="btn-plain" data-del="${w.id}">移除</button>
+            </div>`).join('')
+            : '<div class="ai-tip" style="color:var(--text-3)">还没有挂载任何服务器</div>'}
+        </div>
+
+        <div class="ga-field"><label>服务器地址</label>
+          <input id="w-base" placeholder="http://192.168.1.172:8787 或 https://xxx.ts.net" style="width:100%;padding:9px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--text)">
+        </div>
+        <div class="ga-field"><label>那台服务器上的手机号</label>
+          <input id="w-account" placeholder="手机号" style="width:100%;padding:9px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--text)">
+        </div>
+        <div class="ga-field"><label>密码</label>
+          <input id="w-password" type="password" placeholder="密码" style="width:100%;padding:9px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--text)">
+        </div>
+      </div>
+      <div class="prompt-actions">
+        <button type="button" class="prompt-cancel">关闭</button>
+        <button type="button" class="prompt-ok">添加</button>
+      </div>
+    </div>`;
+  document.body.appendChild(mask);
+
+  const close = () => mask.remove();
+  mask.addEventListener('mousedown', (e) => { if (e.target === mask) close(); });
+  mask.querySelector('.prompt-cancel').addEventListener('click', close);
+
+  mask.querySelectorAll('[data-del]').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      try {
+        await api(`/api/worlds/${btn.dataset.del}`, { method: 'DELETE' });
+        await loadWorlds();
+        renderConvList();
+        updateWorldsHint();
+        btn.closest('.world-row').remove();
+        toast('已移除');
+      } catch (err) {
+        toast(err.message || '移除失败');
+      }
+    });
+  });
+
+  mask.querySelector('.prompt-ok').addEventListener('click', async () => {
+    const baseUrl = mask.querySelector('#w-base').value.trim();
+    const account = mask.querySelector('#w-account').value.trim();
+    const password = mask.querySelector('#w-password').value;
+    if (!baseUrl || !account || !password) return toast('地址、手机号、密码都要填');
+    const btn = mask.querySelector('.prompt-ok');
+    btn.disabled = true;
+    btn.textContent = '连接中…';
+    try {
+      await api('/api/worlds', { method: 'POST', body: { baseUrl, account, password } });
+      await loadWorlds();
+      renderConvList();
+      updateWorldsHint();
+      updateWorldsHint();
+      startWorldsRefresh();
+      toast('已添加，会话会出现在列表里');
+      close();
+    } catch (err) {
+      toast(err.message || '加不进去');
+      btn.disabled = false;
+      btn.textContent = '添加';
+    }
+  });
+}
+
+function updateWorldsHint() {
+  const el = $('#set-worlds-hint');
+  if (!el) return;
+  const list = state.worlds || [];
+  const online = list.filter((w) => w.status === 'online').length;
+  el.textContent = list.length ? `${online}/${list.length} 在线` : '未添加';
 }
 
 /* ---- 建群：起名 + 勾选好友一起拉进来 ---- */
@@ -4331,9 +4497,24 @@ async function boot() {
     showApp();
     renderRail();
     renderConvList();
-    const first = state.convs[0];
-    if (first) openConv(first.id);
-    else showOnboarding();
+    // 把别的服务器（世界）的会话也拉进来，合并显示
+    await loadWorlds();
+    renderConvList();
+
+    // 深链：从别的世界跳过来时带着 #conv=<id>，直接打开那个会话
+    const deep = /^#conv=(\d+)$/.exec(location.hash || '');
+    if (deep) {
+      history.replaceState(null, '', location.pathname + location.search);
+      openConv(Number(deep[1])).catch(() => {
+        const f = state.convs[0];
+        if (f) openConv(f.id);
+        else showOnboarding();
+      });
+    } else {
+      const first = state.convs[0];
+      if (first) openConv(first.id);
+      else showOnboarding();
+    }
     connect();
     watchKeyboard();
 
@@ -4448,7 +4629,18 @@ function bind() {
   // 会话切换
   $('#conv-list').addEventListener('click', (e) => {
     const row = e.target.closest('[data-conv]');
-    if (row) openConv(Number(row.dataset.conv));
+    if (row) { openConv(Number(row.dataset.conv)); return; }
+
+    // 别的服务器上的会话：在线就跳过去（带 #conv= 深链），离线只提示
+    const wrow = e.target.closest('[data-world]');
+    if (wrow) {
+      const w = (state.worlds || []).find((x) => Number(x.id) === Number(wrow.dataset.world));
+      if (!w) return;
+      if (w.status === 'offline') { toast('这个服务器离线了，等它开机再点'); return; }
+      if (w.status === 'need-login') toast('这个服务器的登录失效了，跳过去重新登录一次');
+      const base = String(w.baseUrl || '').replace(/\/+$/, '');
+      location.href = base + '/#conv=' + Number(wrow.dataset.rconv);
+    }
   });
 
   // 搜索
@@ -5036,6 +5228,14 @@ isInAppShell();
         location.href = 'https://localhost/index.html?switch=1';
       });
     }
+  }
+
+  const worldsBtn = $('#set-worlds');
+  if (worldsBtn) {
+    worldsBtn.addEventListener('click', () => {
+      $('#settings-popover').hidden = true;
+      openWorldsManager().catch((err) => toast(err.message || '打不开'));
+    });
   }
 
   $('#set-join').addEventListener('click', async () => {

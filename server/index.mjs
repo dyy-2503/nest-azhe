@@ -18,6 +18,7 @@ import {
   conversationMembers, preview, publicUser, saveAttachment, hideMessage, capsOf, DEFAULT_CAPS,
   visibleMaxSeq, ROOT, MEDIA_DIR,
 } from './db.mjs';
+import { worldsForClient, addWorld, removeWorld, invalidateWorld } from './worlds.mjs';
 import {
   hashPassword, verifyPassword, newToken, parseCookies, sessionCookie, isSecureReq,
   newAiKey, aiKeyHash, newInvite,
@@ -876,6 +877,42 @@ async function api(req, res, url) {
   }
 
   /* ---- 引导数据 ---- */
+  /* ---- 世界：把别的 Nest 服务器挂到本机，会话列表合并显示 ---- */
+  if (method === 'GET' && p === '/api/worlds') {
+    requireUser(req);
+    return json(res, 200, { worlds: await worldsForClient() });
+  }
+
+  if (method === 'POST' && p === '/api/worlds') {
+    requireUser(req);
+    const body = await readJson(req);
+    try {
+      const world = await addWorld({
+        baseUrl: body.baseUrl || body.base_url || '',
+        account: String(body.account || '').trim(),
+        password: String(body.password || ''),
+        title: body.title || '',
+      });
+      return json(res, 200, { world: { id: Number(world.id), baseUrl: world.base_url, title: world.title } });
+    } catch (err) {
+      return json(res, 400, { error: err.message || '加不进去' });
+    }
+  }
+
+  if (method === 'POST' && /^\/api\/worlds\/\d+\/refresh$/.test(p)) {
+    requireUser(req);
+    const wid = Number(p.split('/')[3]);
+    invalidateWorld(wid);
+    return json(res, 200, { ok: true });
+  }
+
+  if (method === 'DELETE' && /^\/api\/worlds\/\d+$/.test(p)) {
+    requireUser(req);
+    const wid = Number(p.split('/')[3]);
+    const ok = removeWorld(wid);
+    return json(res, ok ? 200 : 404, ok ? { ok: true } : { error: '没有这个世界' });
+  }
+
   if (method === 'GET' && p === '/api/bootstrap') {
     const user = requireUser(req);
     return json(res, 200, {
