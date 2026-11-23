@@ -1218,11 +1218,11 @@ function openMyProfile() {
           openCropper({
             file: f,
             aspect: 1,
-            maxOut: 512,
+            maxOut: 256,
             title: '裁剪头像（1:1）',
             onDone: async (blob) => {
               try {
-                const up = await api('/api/upload', { method: 'POST', raw: blob, type: 'image/png' });
+                const up = await api('/api/upload', { method: 'POST', raw: blob, type: blob.type || 'image/png' });
                 const r = await api('/api/profile', { method: 'POST', body: { avatar: up.url } });
                 refreshMe(r.me);
                 const av = mask.querySelector('#my-avatar') || mask.querySelector('[id$="-avatar"]');
@@ -1417,11 +1417,11 @@ async function openAiProfile(member) {
           openCropper({
             file: f,
             aspect: 1,
-            maxOut: 512,
+            maxOut: 256,
             title: '裁剪头像（1:1）',
             onDone: async (blob) => {
               try {
-                const up = await api('/api/upload', { method: 'POST', raw: blob, type: 'image/png' });
+                const up = await api('/api/upload', { method: 'POST', raw: blob, type: blob.type || 'image/png' });
                 const r = await api('/api/profile', { method: 'POST', body: { avatar: up.url } });
                 refreshMe(r.me);
                 const av = mask.querySelector('#my-avatar') || mask.querySelector('[id$="-avatar"]');
@@ -3385,7 +3385,9 @@ async function openCropper({ file, aspect = 1, maxOut = 512, title = '裁剪图�
       const sw = vw / (base * st.scale);
       const sh = vh / (base * st.scale);
       ctx.drawImage(img, sx, sy, sw, sh, 0, 0, outW, outH);
-      const blob = await new Promise((res) => canvas.toBlob(res, 'image/png'));
+      // 头像是小图：用 JPEG 压到几十 KB，公网隧道下也能秒开（之前 PNG 512 有 400KB+）
+      const mime = outW <= 320 ? 'image/jpeg' : 'image/png';
+      const blob = await new Promise((res) => canvas.toBlob(res, mime, 0.86));
       if (!blob) throw new Error('导出失败');
       close();
       await onDone(blob);
@@ -3424,7 +3426,7 @@ function pickStickerFromFile() {
       onDone: async (blob) => {
         try {
           toast('上传中…');
-          const up = await api('/api/upload', { method: 'POST', raw: blob, type: 'image/png' });
+          const up = await api('/api/upload', { method: 'POST', raw: blob, type: blob.type || 'image/png' });
           await api('/api/stickers', { method: 'POST', body: { sha: up.sha, ext: up.ext } });
           toast('已存进表情');
           loadStickers();
