@@ -928,7 +928,12 @@ async function api(req, res, url) {
     const convId = Number(url.searchParams.get('conv'));
     if (!isMember(convId, user.id)) return json(res, 403, { error: '不在该会话' });
     const before = Number(url.searchParams.get('before') || 0);
-    const limit = Math.min(80, Math.max(1, Number(url.searchParams.get('limit') || 40)));
+    const after = Number(url.searchParams.get('after') || 0);
+    const limit = Math.min(200, Math.max(1, Number(url.searchParams.get('limit') || 40)));
+    if (after) {
+      const out = listMessages(convId, { after, limit, viewer: user.id });
+      return json(res, 200, { messages: out.messages, hasMore: out.hasMore, mode: 'after' });
+    }
     const messages = listMessages(convId, { before, limit, viewer: user.id });
     return json(res, 200, {
       messages,

@@ -432,12 +432,25 @@ export function visibleMaxSeq(convId, userId) {
   return Number(row.s);
 }
 
-export function listMessages(convId, { before = 0, limit = 40, viewer = 0 } = {}) {
+export function listMessages(convId, { before = 0, after = 0, limit = 40, viewer = 0 } = {}) {
   // 隐藏掉「被我删过」的消息
   const hideSql = viewer
     ? ' AND m.id NOT IN (SELECT message_id FROM hidden_messages WHERE user_id = ?)'
     : '';
   const hideArgs = viewer ? [viewer] : [];
+
+  // after：断线重连后的增量补拉（只取比它新的），升序返回
+  if (after) {
+    const rows = all(
+      `SELECT m.*, u.handle, u.nickname, u.avatar, u.kind
+       FROM messages m JOIN users u ON u.id = m.sender_id
+       WHERE m.conv_id = ? AND m.id > ?${hideSql}
+       ORDER BY m.id ASC LIMIT ?`,
+      convId, after, ...hideArgs, limit + 1
+    );
+    const hasMore = rows.length > limit;
+    return { messages: rows.slice(0, limit).map(hydrate), hasMore };
+  }
 
   const rows = before
     ? all(
@@ -454,7 +467,9 @@ export function listMessages(convId, { before = 0, limit = 40, viewer = 0 } = {}
           ORDER BY m.id DESC LIMIT ?`,
         convId, ...hideArgs, limit
       );
-  return rows.reverse().map(hydrate);
+  const list = rows.reverse().map(hydrate);
+  list.hasMore = rows.length >= limit && rows.length > 0;
+  return list;
 }
 
 /** 本地删除：对这个用户隐藏，不动消息本体 */

@@ -537,6 +537,20 @@ function showOnboarding() {
   $('#onboard-contact').addEventListener('click', () => switchTab('contact'));
 }
 
+/** 增量补拉：把 afterId 之后的消息全部取回来（每页 200 条，最多 5 页） */
+async function fetchAfter(convId, afterId) {
+  const out = [];
+  let cursor = afterId;
+  for (let round = 0; round < 5; round++) {
+    const r = await api(`/api/messages?conv=${convId}&after=${cursor}&limit=200`);
+    const list = r.messages || [];
+    out.push(...list);
+    if (!r.hasMore || !list.length) break;
+    cursor = list[list.length - 1].id;
+  }
+  return out;
+}
+
 async function openConv(convId) {
   if (state.activeId === convId) return;
   // 存草稿
@@ -564,12 +578,26 @@ async function openConv(convId) {
   if (!matchMedia('(pointer: coarse)').matches) $('#input').focus();
 
   try {
-    const rows = await api(`/api/messages?conv=${convId}&limit=40`);
-    // 请求期间用户可能已经切走：迟到的响应不能覆盖当前会话（否则 A 的消息会渲染进 B）
-    if (state.activeId !== convId) return;
-    const messages = rows.messages;
+    const cached = state.messages.get(convId) || [];
+    const maxId = cached.length ? cached[cached.length - 1].id : 0;
+    let messages;
+    if (maxId) {
+      // 有缓存：只补 after=最后一条，断了多久都能补齐（服务器是缓存，别丢中间的消息）
+      const fresh = await fetchAfter(convId, maxId);
+      if (state.activeId !== convId) return;
+      const merged = new Map();
+      for (const m of cached) merged.set(m.id, m);
+      for (const m of fresh) merged.set(m.id, m);
+      messages = [...merged.values()].sort((a, b) => a.id - b.id);
+      if (fresh.length) toast('补上了 ' + fresh.length + ' 条消息');
+    } else {
+      const rows = await api(`/api/messages?conv=${convId}&limit=40`);
+      // 请求期间用户可能已经切走：迟到的响应不能覆盖当前会话（否则 A 的消息会渲染进 B）
+      if (state.activeId !== convId) return;
+      messages = rows.messages;
+      state.hasMore?.set(convId, !!rows.hasMore);
+    }
     state.messages.set(convId, messages);
-    state.hasMore?.set(convId, !!rows.hasMore);
     messages.forEach((m) => state.seen.add(m.id));
     renderMessages(convId);
     const lastSeq = messages.length ? messages[messages.length - 1].seq : c.lastSeq;
@@ -699,11 +727,15 @@ async function resync() {
     renderConvList();
     if (!activeId) return;
 
-    const { messages } = await api(`/api/messages?conv=${activeId}&limit=40`);
+    const cached = state.messages.get(activeId) || [];
+    const maxId = cached.length ? cached[cached.length - 1].id : 0;
+    const fresh = maxId
+      ? await fetchAfter(activeId, maxId)
+      : (await api(`/api/messages?conv=${activeId}&limit=40`)).messages;
     if (state.activeId !== activeId) return;
     const merged = new Map();
-    for (const m of state.messages.get(activeId) || []) merged.set(m.id, m);
-    for (const m of messages) merged.set(m.id, m);
+    for (const m of cached) merged.set(m.id, m);
+    for (const m of fresh) merged.set(m.id, m);
     const list = [...merged.values()].sort((a, b) => a.id - b.id);
     state.messages.set(activeId, list);
     for (const m of list) state.seen.add(m.id);
