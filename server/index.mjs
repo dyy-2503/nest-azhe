@@ -940,7 +940,18 @@ async function api(req, res, url) {
     return json(res, 200, { ok: true });
   }
 
-  if (method === 'DELETE' && /^\/api\/worlds\/\d+$/.test(p)) {
+  if (method === 'POST' && /^\/api\/worlds\/\d+\/rename$/.test(p)) {
+  requireUser(req);
+  const wid = Number(p.split('/')[3]);
+  const body = await readJson(req);
+  const title = String(body.title || '').trim().slice(0, 40);
+  if (!title) return json(res, 400, { error: '名字不能为空' });
+  const changed = run('UPDATE worlds SET title = ? WHERE id = ?', title, wid).changes;
+  invalidateWorld(wid);
+  return json(res, changed ? 200 : 404, changed ? { ok: true, title } : { error: '没有这个世界' });
+}
+
+if (method === 'DELETE' && /^\/api\/worlds\/\d+$/.test(p)) {
     requireUser(req);
     const wid = Number(p.split('/')[3]);
     const ok = removeWorld(wid);

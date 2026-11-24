@@ -1,6 +1,6 @@
 {
     "name":  "nest-desktop",
-    "version":  "0.5.9",
+    "version":  "0.5.10",
     "private":  true,
     "description":  "Nest 桌面客户端：聊天 + 一键把自己的 AI 接上线",
     "author":  "Nest contributors",

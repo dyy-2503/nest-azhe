@@ -1743,7 +1743,7 @@ async function openWorldsManager() {
     <div class="modal" style="width:520px;max-height:82vh">
       <div class="modal-head"><span>服务器世界</span></div>
       <div class="modal-body" style="overflow:auto">
-        <div class="ai-tip">把朋友的（或你自己电脑上的）Nest 服务器挂到这儿，它们的会话会合并显示在左边列表里；离线时灰掉，点一下就跳过去。</div>
+        <div class="ai-tip">把朋友的（或你自己电脑上的）Nest 服务器挂到这儿。它们的会话会单独列在左边「其它世界」那一段：只能点过去聊，不在这里发，离线会灰掉。</div>
         <div id="world-list" style="margin:12px 0">
           ${worlds.length ? worlds.map((w) => `
             <div class="world-row" data-wid="${w.id}" style="display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--line)">
@@ -1751,7 +1751,10 @@ async function openWorldsManager() {
                 <div style="font-size:13.5px">${esc(w.title)}</div>
                 <div style="font-size:11.5px;color:var(--text-3)">${esc(w.baseUrl)} · ${statusText(w)}${errText(w) ? ' · ' + esc(errText(w)) : ''}</div>
               </div>
-              <button type="button" class="btn-plain" data-del="${w.id}">移除</button>
+              <span style="font-size:11.5px;color:var(--text-3)">${(w.convs || []).length} 个会话</span>
+        <button type="button" class="btn-plain" data-refresh="${w.id}">刷新</button>
+        <button type="button" class="btn-plain" data-rename="${w.id}">改名</button>
+        <button type="button" class="btn-plain" data-del="${w.id}">移除</button>
             </div>`).join('')
             : '<div class="ai-tip" style="color:var(--text-3)">还没有挂载任何服务器</div>'}
         </div>
@@ -1776,6 +1779,44 @@ async function openWorldsManager() {
   const close = () => mask.remove();
   mask.addEventListener('mousedown', (e) => { if (e.target === mask) close(); });
   mask.querySelector('.prompt-cancel').addEventListener('click', close);
+
+  mask.querySelectorAll('[data-refresh]').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      btn.disabled = true;
+      btn.textContent = '刷新中…';
+      try {
+        await api('/api/worlds/' + btn.dataset.refresh + '/refresh', { method: 'POST' });
+        await loadWorlds();
+        renderConvList();
+        updateWorldsHint();
+        toast('已刷新');
+      } catch (err) {
+        toast(err.message || '刷新失败');
+      } finally {
+        btn.disabled = false;
+        btn.textContent = '刷新';
+      }
+    });
+  });
+
+  mask.querySelectorAll('[data-rename]').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const row = btn.closest('.world-row');
+      const oldTitle = (row?.querySelector('div div')?.textContent || '').trim();
+      const title = await promptText({ title: '给这个世界起个名字', value: oldTitle, placeholder: '比如：阿哲的电脑' });
+      if (!title) return;
+      try {
+        await api('/api/worlds/' + btn.dataset.rename + '/rename', { method: 'POST', body: { title } });
+        await loadWorlds();
+        renderConvList();
+        updateWorldsHint();
+        toast('改名成功');
+        if (row) row.querySelector('div div').textContent = title;
+      } catch (err) {
+        toast(err.message || '改名失败');
+      }
+    });
+  });
 
   mask.querySelectorAll('[data-del]').forEach((btn) => {
     btn.addEventListener('click', async () => {
@@ -2306,6 +2347,44 @@ function confirmModal({ title, text, confirm = '确定', danger = false }) {
         finish(false);
       }
     });
+  });
+}
+
+/** 简单的文本输入弹窗（浏览器 prompt 在桌面端不可靠） */
+function promptText({ title, label = '', value = '', placeholder = '', confirm = '确定' }) {
+  return new Promise((resolve) => {
+    const mask = document.createElement('div');
+    mask.className = 'modal-mask';
+    mask.innerHTML = `
+      <div class="modal prompt-modal">
+        <div class="modal-head">${esc(title)}</div>
+        <div class="modal-body">
+          ${label ? `<p class="confirm-text">${esc(label)}</p>` : ''}
+          <input class="prompt-input" type="text" value="${esc(value)}" placeholder="${esc(placeholder)}"
+            style="width:100%;padding:10px;border:1px solid var(--line);border-radius:9px;background:var(--card);color:var(--text);font-size:14px">
+        </div>
+        <div class="prompt-actions">
+          <button type="button" class="prompt-cancel">取消</button>
+          <button type="button" class="prompt-ok">${esc(confirm)}</button>
+        </div>
+      </div>`;
+    document.body.appendChild(mask);
+    const input = mask.querySelector('.prompt-input');
+    let done = false;
+    const finish = (v) => {
+      if (done) return;
+      done = true;
+      mask.remove();
+      resolve(v);
+    };
+    mask.addEventListener('mousedown', (e) => { if (e.target === mask) finish(null); });
+    mask.querySelector('.prompt-cancel').addEventListener('click', () => finish(null));
+    mask.querySelector('.prompt-ok').addEventListener('click', () => finish(input.value.trim() || null));
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); finish(input.value.trim() || null); }
+      if (e.key === 'Escape') finish(null);
+    });
+    setTimeout(() => { input.focus(); input.select(); }, 50);
   });
 }
 
