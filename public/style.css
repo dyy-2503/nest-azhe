@@ -2766,3 +2766,14 @@ html, body { overscroll-behavior: none; }
 
 /* 设置抽屉/弹层打开时，右下角「服务器」悬浮按钮让位 */
 body.pop-open #app-server-btn { display: none !important; }
+
+/* ---- 跨世界入口行：只做"跳过去聊"，不是本地会话 ---- */
+.conv.world-entry { border-left: 2px solid rgba(107, 127, 158, .35); }
+.conv.world-entry .conv-name span { color: var(--text-2); }
+.world-jump {
+  font-size: 12px;
+  color: var(--text-3);
+  margin-left: 2px;
+  flex: none;
+}
+.conv.world-entry:hover .world-jump { color: var(--accent); }

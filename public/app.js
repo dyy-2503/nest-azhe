@@ -196,7 +196,7 @@ function convRowHtml(c) {
           ${isAgent && c.kind === 'dm' ? '<i class="tag-ai">AI</i>' : ''}
           ${c.pinned ? '<i class="pin-flag">置顶</i>' : ''}
         </div>
-        <div class="conv-preview">${esc(preview)}</div>
+      <div class="conv-preview">${esc(preview)}</div>
       </div>
       <div class="conv-side">
         <span class="conv-time">${listTime(last?.createdAt)}</span>
@@ -212,17 +212,19 @@ function worldConvRowHtml(world, c) {
   const preview = c.lastText || '还没有消息';
   const badge = c.unread > 0 ? `<i class="unread">${c.unread > 99 ? '99+' : c.unread}</i>` : '';
   return `
-    <div class="conv is-world${offline ? ' is-offline' : ''}" data-world="${world.id}" data-rconv="${c.id}" title="${offline ? esc(world.error || '离线') : esc(world.baseUrl)}">
+    <div class="conv is-world world-entry${offline ? ' is-offline' : ''}" data-world="${world.id}" data-rconv="${c.id}"
+      title="${offline ? esc(world.error || '离线') + '（连不上）' : '这条会话在 ' + esc(worldName) + '，点一下跳过去聊'}">
       ${avatarHtml({ id: c.id + 9000, nickname: c.title, kind: c.kind === 'group' ? 'group' : 'agent', avatar: c.avatar })}
       <div class="conv-main">
         <div class="conv-name">
           <span>${esc(c.title)}</span>
           <i class="tag-world">${esc(worldName)}</i>
         </div>
-        <div class="conv-preview">${esc(preview)}</div>
+      <div class="conv-preview">${offline ? '连不上 · ' : '去那边聊 · '}${esc(preview)}</div>
       </div>
       <div class="conv-side">
         <span class="conv-time">${listTime(c.lastAt)}</span>
+        <span class="world-jump" aria-hidden="true">↗</span>
         ${badge}
       </div>
     </div>`;
