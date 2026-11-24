@@ -4714,6 +4714,26 @@ async function refreshConversations() {
 
 /* --------------------------------- 启动 --------------------------------- */
 
+/** 从别的世界跳过来的：顶部挂一条「回我的世界」，点一下回去 */
+function showCrossWorldBar(backTo) {
+  try {
+    if (sessionStorage.getItem('nest.crossworld.dismiss') === backTo) return;
+  } catch { /* ignore */ }
+  const el = document.createElement('div');
+  el.className = 'crossworld-bar';
+  el.innerHTML = `<span>你正在 <b>${esc(location.host)}</b> 的服务器上</span>
+    <button type="button" id="crossworld-back">← 回我的世界</button>
+    <button type="button" class="crossworld-x" title="知道了">×</button>`;
+  document.body.appendChild(el);
+  el.querySelector('#crossworld-back').addEventListener('click', () => {
+    location.href = backTo + '/';
+  });
+  el.querySelector('.crossworld-x').addEventListener('click', () => {
+    try { sessionStorage.setItem('nest.crossworld.dismiss', backTo); } catch { /* ignore */ }
+    el.remove();
+  });
+}
+
 async function boot() {
   applyTheme();
   initList();
@@ -4735,11 +4755,14 @@ async function boot() {
     await loadWorlds();
     renderConvList();
 
-    // 深链：从别的世界跳过来时带着 #conv=<id>，直接打开那个会话
-    const deep = /^#conv=(\d+)$/.exec(location.hash || '');
-    if (deep) {
+    // 深链：从别的世界跳过来时带着 #conv=<id>&back=<来源>，直接打开那条会话
+    const hashParams = new URLSearchParams(String(location.hash || '').replace(/^#/, ''));
+    const deepConv = Number(hashParams.get('conv')) || 0;
+    const backTo = String(hashParams.get('back') || '').replace(/\/+$/, '');
+    if (deepConv) {
       history.replaceState(null, '', location.pathname + location.search);
-      openConv(Number(deep[1])).catch(() => {
+      if (/^https?:\/\//.test(backTo)) showCrossWorldBar(backTo);
+      openConv(deepConv).catch(() => {
         const f = state.convs[0];
         if (f) openConv(f.id);
         else showOnboarding();
@@ -4901,7 +4924,7 @@ function bind() {
       if (w.status === 'offline') { toast('这个服务器离线了，等它开机再点'); return; }
       if (w.status === 'need-login') toast('这个服务器的登录失效了，跳过去重新登录一次');
       const base = String(w.baseUrl || '').replace(/\/+$/, '');
-      location.href = base + '/#conv=' + Number(wrow.dataset.rconv);
+      location.href = base + '/#conv=' + Number(wrow.dataset.rconv) + '&back=' + encodeURIComponent(location.origin);
     }
   });
 
