@@ -2785,3 +2785,9 @@ body.pop-open #app-server-btn { display: none !important; }
   background: var(--card); color: var(--text); font-size: 14px; text-align: center;
 }
 .share-row.is-off { opacity: .55; }
+/* ---- AI 列表里的「分享中」角标 ---- */
+.ai-share-chip {
+  margin-left: 6px; padding: 1px 6px; border-radius: 999px;
+  font-size: 11px; color: #0b7a3e; background: rgba(16, 185, 129, .12);
+  border: 1px solid rgba(16, 185, 129, .3);
+}

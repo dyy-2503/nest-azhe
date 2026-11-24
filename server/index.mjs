@@ -2337,6 +2337,8 @@ if (method === 'GET' && p === '/api/server-info') {
           WHERE m.user_id = ? AND c.kind = 'group'`,
         u.id
       ).map((c) => ({ id: c.id, title: c.title })),
+      // 分享状态：列表里直接标出来，不用点进去才知道
+      share: shareOf(u.id),
     }));
     return json(res, 200, { members });
   }
