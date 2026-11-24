@@ -60,8 +60,34 @@ function setStatus(el, text, kind = '') {
     }
   });
 
+  // 端口上已经有 Nest 在跑？（守护进程或上次开的）
+  const localInfo = await probeLocal(Number($('#host-port').value) || 8787);
+  if (localInfo) markAlreadyRunning(localInfo);
+
   await refreshLog();
 })();
+
+/** 本机端口上是不是已经有一个 Nest 在跑（守护进程 / 之前开的那个） */
+async function probeLocal(port) {
+  try {
+    const res = await fetch('http://127.0.0.1:' + port + '/api/server-info', {
+      signal: AbortSignal.timeout(1500),
+      cache: 'no-store',
+    });
+    if (!res.ok) return null;
+    return await res.json();
+  } catch {
+    return null;
+  }
+}
+
+/** 已经有 Nest 在跑：别让用户再点一次"启动"然后撞端口冲突 */
+function markAlreadyRunning(info) {
+  $('#btn-host').hidden = true;
+  $('#btn-host-open').hidden = false;
+  const port = info?.port || Number($('#host-port').value) || 8787;
+  setStatus($('#host-status'), '这台电脑上已经有一个 Nest 在跑（端口 ' + port + '），点「打开」直接用', 'ok');
+}
 
 /* ------------------------------ 日志 ------------------------------ */
 
@@ -95,7 +121,13 @@ $('#btn-host').addEventListener('click', async () => {
   await api.save({ hostPort: port });
   const r = await api.startServer(port);
   if (!r.ok) {
-    setStatus($('#host-status'), '启动失败：' + (r.error || '看日志'), 'err');
+    const busy = /EADDRINUSE|already in use/i.test(String(r.error || ''));
+    if (busy) {
+      $('#btn-host-open').hidden = false;
+      setStatus($('#host-status'), '端口 ' + port + ' 已经被占用了（可能已经有一个 Nest 在跑），点「打开」试试', 'err');
+    } else {
+      setStatus($('#host-status'), '启动失败：' + (r.error || '看日志'), 'err');
+    }
     return;
   }
   // 服务器起来了，直接在主窗口打开它
