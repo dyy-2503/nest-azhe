@@ -17,7 +17,7 @@
  *   node scripts/supervise.mjs --no-bridge  # 只守服务端
  */
 import { spawn } from 'node:child_process';
-import { appendFileSync, existsSync, readFileSync, writeFileSync, unlinkSync, mkdirSync } from 'node:fs';
+import { appendFileSync, existsSync, readFileSync, readdirSync, writeFileSync, unlinkSync, mkdirSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { findDshBase } from './lib/dsh.mjs';
@@ -130,6 +130,43 @@ class Child {
   }
 }
 
+/** 每天自动备份一次：默认 04:00 之后；机器那次没开就下次检查时补跑。
+ *  备份目录默认 E:\\nest-backup（可用 NEST_BACKUP_DIR 覆盖），保留 10 份。 */
+function startDailyBackup() {
+  const OUT = process.env.NEST_BACKUP_DIR || 'E:\\nest-backup';
+  const KEEP = String(process.env.NEST_BACKUP_KEEP || '10');
+  const todayStamp = () => {
+    const d = new Date();
+    const p2 = (n) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}${p2(d.getMonth() + 1)}${p2(d.getDate())}`;
+  };
+  const alreadyDone = () => {
+    try {
+      if (!existsSync(OUT)) return false;
+      const day = todayStamp();
+      return readdirSync(OUT).some((n) => n.startsWith('nest-data-' + day) && n.endsWith('.zip'));
+    } catch {
+      return false;
+    }
+  };
+  const run = () => {
+    if (alreadyDone()) return;
+    log('开始每日备份 → ' + OUT);
+    const child = spawn(NODE, ['--no-warnings', 'scripts/backup.mjs', '--out', OUT, '--keep', KEEP], {
+      cwd: ROOT, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    child.stdout.on('data', (b) => log('[backup] ' + String(b).trim().split(/\r?\n/).slice(-1)[0]));
+    child.stderr.on('data', (b) => log('[backup] 错误：' + String(b).trim().slice(0, 200)));
+    child.on('exit', (code) => log('[backup] 结束 code=' + code));
+  };
+  const check = () => {
+    const hour = new Date().getHours();
+    if (hour >= 4) run();
+  };
+  setTimeout(check, 30 * 1000);            // 启动 30 秒后补跑一次
+  setInterval(check, 30 * 60 * 1000);       // 之后每 30 分钟看一眼
+}
+
 const children = [];
 
 async function main() {
@@ -176,6 +213,8 @@ async function main() {
     children.push(tunnel);
     setTimeout(() => tunnel.start(), 2500);
   }
+
+  startDailyBackup();
 
   const shutdown = (sig) => {
     log(`收到 ${sig}，停掉子进程`);
