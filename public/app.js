@@ -478,11 +478,99 @@ function messageEl(m, prev) {
   return row;
 }
 
+/* ---- 离线发件箱：断网时先把消息排队，连上自动补发（服务端用 clientId 幂等，不会重复） ---- */
+
+const OUTBOX_KEY = 'nest.outbox.v1';
+
+function loadOutbox() {
+  try {
+    const list = JSON.parse(localStorage.getItem(OUTBOX_KEY) || '[]');
+    return Array.isArray(list) ? list.filter((x) => x && x.clientId && x.conv) : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveOutbox(list) {
+  try {
+    localStorage.setItem(OUTBOX_KEY, JSON.stringify(list.slice(-50)));
+  } catch { /* ignore */ }
+}
+
+function outboxFor(convId) {
+  return loadOutbox().filter((x) => Number(x.conv) === Number(convId));
+}
+
+function enqueueOutbox(item) {
+  const list = loadOutbox();
+  if (list.some((x) => x.clientId === item.clientId)) return;
+  list.push(item);
+  saveOutbox(list);
+}
+
+/** 网络类错误（断网/超时/服务不可达）才排队；4xx 这类是服务端明确拒绝，不能排 */
+function isNetworkError(err) {
+  const m = String((err && err.message) || err || '');
+  return /Failed to fetch|NetworkError|Load failed|fetch failed|network|ERR_NETWORK|timeout|aborted/i.test(m);
+}
+
+/** 排队中的消息长什么样：带「待发送」标记 */
+function pendingEl(item) {
+  const row = document.createElement('div');
+  row.className = 'msg me is-pending';
+  row.dataset.clientId = item.clientId;
+  const texts = (item.blocks || []).filter((b) => b.t === 'text').map((b) => b.v).join('\n');
+  const media = (item.blocks || []).filter((b) => b.t !== 'text').map((b) => (b.t === 'image' ? '［图片］' : b.t === 'voice' ? '［语音］' : '［文件］')).join(' ');
+  row.innerHTML = `
+    <div class="av-gutter" style="width:34px;height:1px;flex:none"></div>
+    <div class="msg-body">
+      <div class="msg-meta"><b>我</b><span>待发送</span></div>
+      <div class="bubble">${media ? esc(media) + ' ' : ''}${esc(texts)}</div>
+    </div>`;
+  return row;
+}
+
+let flushing = false;
+
+/** 把发件箱里的消息按顺序发出去；遇到网络错误就停下，剩下的留到下次 */
+async function flushOutbox() {
+  if (flushing) return;
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) return;
+  const list = loadOutbox();
+  if (!list.length) return;
+  flushing = true;
+  const rest = [];
+  let stopped = false;
+  let sent = 0;
+  for (const item of list) {
+    if (stopped) { rest.push(item); continue; }
+    try {
+      const { message } = await api('/api/message', {
+        method: 'POST',
+        body: { conv: item.conv, blocks: item.blocks, replyTo: item.replyTo || 0, clientId: item.clientId },
+      });
+      if (message && !state.seen.has(message.id)) pushMessage({ type: 'message', message });
+      sent++;
+    } catch (err) {
+      if (isNetworkError(err)) {
+        stopped = true;
+        rest.push(item);
+      } else {
+        toast('排队消息被拒绝：' + (err.message || '未知原因'));
+      }
+    }
+  }
+  saveOutbox(rest);
+  flushing = false;
+  if (state.activeId) renderMessages(state.activeId);
+  if (sent) toast(sent === 1 ? '排队的消息发出去了' : `排队的 ${sent} 条消息发出去了`);
+}
+
 function renderMessages(convId, { scroll = true } = {}) {
   const box = $('#messages');
   const list = state.messages.get(convId) || [];
   box.innerHTML = '';
-  if (!list.length) {
+  if (!list.length && !outboxFor(convId).length) {
     box.innerHTML = '<div class="empty-hint"><p>还没有消息，说点什么</p></div>';
     return;
   }
@@ -508,6 +596,8 @@ function renderMessages(convId, { scroll = true } = {}) {
     frag.appendChild(messageEl(m, prev));
     prev = m;
   }
+  // 离线时发的、还在排队的消息显示在最后（带「待发送」）
+  for (const item of outboxFor(convId)) frag.appendChild(pendingEl(item));
   box.appendChild(frag);
   if (scroll) box.scrollTop = box.scrollHeight;
 }
@@ -698,6 +788,7 @@ function connect() {
   state.es = es;
   es.onopen = () => {
     setConn('已连接', false);
+    flushOutbox();
     // 断线期间服务端不会补发（没有 Last-Event-ID 回放），所以重连后自己补拉一次，
     // 否则手机切网/休眠回来后中间那几条消息就永久缺失。
     if (state.wasDown) {
@@ -715,6 +806,25 @@ function connect() {
     handleEvent(ev);
   };
 }
+
+// 网络恢复：把排队的消息发出去，并补拉断线期间的消息
+window.addEventListener('online', () => {
+  if (state.wasDown) {
+    state.wasDown = false;
+    resync();
+  }
+  flushOutbox();
+});
+
+// 定时兜底：SSE 的重连不一定及时，发件箱里只要有东西就每 5 秒试一次
+const OUTBOX_TICK = setInterval(() => {
+  if (loadOutbox().length) flushOutbox();
+}, 5000);
+// 切回窗口/标签页时也试一次（手机从后台回来属于这种情况）
+window.addEventListener('focus', () => { if (loadOutbox().length) flushOutbox(); });
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && loadOutbox().length) flushOutbox();
+});
 
 /** 重连补拉：会话列表 + 当前会话最近 40 条，按 id 合并去重 */
 async function resync() {
@@ -983,19 +1093,26 @@ async function send() {
     autoGrow();
     state.drafts.set(convId, '');
 
-    const { message } = await api('/api/message', {
-      method: 'POST',
-      body: {
-        conv: convId,
-        blocks,
-        replyTo: state.replyTo ? state.replyTo.id : 0,
-        clientId,
-      },
-    });
-    clearReply();
-    // 服务端会通过 SSE 把同一条消息广播回来，seen 会挡住重复插入
-    if (message && !state.seen.has(message.id)) {
-      pushMessage({ type: 'message', message });
+    const replyTo = state.replyTo ? state.replyTo.id : 0;
+    try {
+      const { message } = await api('/api/message', {
+        method: 'POST',
+        body: { conv: convId, blocks, replyTo, clientId },
+      });
+      clearReply();
+      // 服务端会通过 SSE 把同一条消息广播回来，seen 会挡住重复插入
+      if (message && !state.seen.has(message.id)) {
+        pushMessage({ type: 'message', message });
+      }
+    } catch (err) {
+      if (!isNetworkError(err)) throw err;
+      // 离线：先排进发件箱，界面上显示「待发送」，网络回来自动补发（clientId 保证不重复）
+      enqueueOutbox({ conv: convId, blocks, replyTo, clientId, at: Date.now() });
+      clearReply();
+      renderMessages(convId);
+      toast('离线了，消息先排队，连上就发出去');
+      flushOutbox();
+      return;
     }
   } catch (err) {
     if (!$('#input').value) {
