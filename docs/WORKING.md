@@ -284,3 +284,15 @@
 - 服务端新增 `POST /api/worlds/:id/rename`
 - 说明文字跟新设计对齐：会话"单独列在其它世界那一段，只能点过去聊，不在这里发"
 - 实测改名 200 生效、界面三个按钮正常，截图 `docs/world-manager.png`
+
+### 完成记录（2026-11-24 夜 · 语音真正的拦路虎：Android 清单缺权限）
+- 排查：录音不是缺 https。Chromium 把 `http://127.0.0.1` / `localhost` 当安全上下文，
+  本机世界本来就能调麦克风；Capacitor 的 BridgeWebChromeClient 也已经实现了
+  onPermissionRequest（会申请 RECORD_AUDIO / MODIFY_AUDIO_SETTINGS）
+- 真因：`AndroidManifest.xml` 里根本没声明这两个权限 → 申请直接被拒
+- 已补：RECORD_AUDIO + MODIFY_AUDIO_SETTINGS；APK 0.5.10 重新打好（versionCode 510，3.1MB）
+- 结论：语音在三种环境下可用性——
+  * 本机世界 `http://127.0.0.1:8787`：安全上下文，**可用**
+  * 电脑世界公网 `https://…ts.net`：https，**可用**
+  * 电脑世界局域网 `http://192.168.x.x`：非安全上下文，麦克风会被浏览器拒（只能听不能录）
+- 手机操作清单也备好了（见下一条），等手机连上执行
