@@ -328,3 +328,17 @@
 
 **现在只有一个世界**：手机本地世界。电脑和公网都只是它的中转站，没有第二个账号、没有第二套 AI。
 **已知限制**：手机不在同一个 Wi-Fi（或 DSHA 被杀/省电模式被打开）时，电脑和公网会 502（提示"中转站连不上本地世界"）。
+
+### 完成记录（2026-11-24 夜 · 手机容器时区修复）
+用户反馈"时钟问题"。查下来：手机容器（DSHA 的 Ubuntu）里**没有 tzdata**，`/usr/share/zoneinfo/Asia/Shanghai` 不存在，
+所以容器 `date`、Nest 的 server.log / bridge.log、以及容器里 AI 看到的时间全是 UTC，比本地慢 8 小时
+（AI 之前只能自己带 `TZ=UTC-8` 临时硬算）。
+
+修法（已落地，可复现）：
+1. 电脑上 `pip install tzdata` 拿到真实的 `zoneinfo/Asia/Shanghai`（393B TZif），adb push 到手机
+2. 容器里：`cp` 到 `/usr/share/zoneinfo/Asia/Shanghai`，`ln -sf … /etc/localtime`，`echo Asia/Shanghai > /etc/timezone`
+3. `/root/nest-local/start.sh` 顶部加 `export TZ=Asia/Shanghai`（服务/桥接日志用本地时间）
+4. 重启 Nest 服务与桥接；再重启 DSHA（让 DSH/AI 进程重新读本地时区）
+- 脚本：`scripts/fix-phone-timezone.sh`（用法写在脚本头）
+- 验证：容器 `date` → `Tue Nov 24 22:26 CST 2026`；bridge.log 由 `13:31` 变成 `22:27`；
+  问 AI"现在几点"，回「22:28」（正确）；测试消息已清理
