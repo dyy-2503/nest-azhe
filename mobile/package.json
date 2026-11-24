@@ -1,6 +1,6 @@
 {
     "name":  "nest-mobile",
-    "version":  "0.5.8",
+    "version":  "0.5.9",
     "private":  true,
     "description":  "Nest 安卓客户端：填服务器地址就能用（WebView 壳）",
     "license":  "MIT",

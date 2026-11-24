@@ -2380,7 +2380,17 @@ if ((method === 'GET' || method === 'POST') && /^\/api\/ai\/members\/\d+\/share$
           AND EXISTS (SELECT 1 FROM members m WHERE m.conv_id = c.id AND m.user_id = ?))`,
     since, Number(ai.owner_id) || 0, aiId
   ).n);
-  return json(res, 200, { ...share, todayTotal, todayGuests });
+  // 最近来聊的朋友：只告诉你"谁来过、说了几句"，看不到内容（默认隐私）
+  const guests = all(
+    `SELECT msg.sender_id AS id, u.nickname, u.avatar, COUNT(*) AS n, MAX(msg.created_at) AS lastAt
+       FROM messages msg JOIN users u ON u.id = msg.sender_id
+      WHERE msg.created_at >= ? AND u.kind = 'human' AND msg.sender_id <> ?
+        AND msg.conv_id IN (SELECT c.id FROM conversations c WHERE c.kind = 'dm'
+          AND EXISTS (SELECT 1 FROM members m WHERE m.conv_id = c.id AND m.user_id = ?))
+      GROUP BY msg.sender_id ORDER BY lastAt DESC LIMIT 20`,
+    since, Number(ai.owner_id) || 0, aiId
+  ).map((g) => ({ id: g.id, nickname: g.nickname, avatar: g.avatar || '', count: Number(g.n), lastAt: Number(g.lastAt) }));
+  return json(res, 200, { ...share, todayTotal, todayGuests, guests });
 }
 
 if (method === 'POST' && p === '/api/ai/members') {

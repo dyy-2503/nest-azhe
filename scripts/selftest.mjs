@@ -287,6 +287,8 @@ ok('第 3 句撞额度被拒', r.status === 429 && r.json?.code === 'ai_share_qu
 
 r = await req(`/api/ai/members/${aiId}/share`, { j: jA });
 ok('分享设置能看到今日用量', Number(r.json?.todayTotal) >= 2 && Number(r.json?.todayGuests) >= 1, JSON.stringify(r.json).slice(0, 120));
+ok('guests 里有来聊过的朋友', (r.json?.guests || []).some((g) => g.id === meB.id && g.count >= 2), JSON.stringify(r.json?.guests || []).slice(0, 120));
+ok('guests 只给名字和句数（没有内容字段）', (r.json?.guests || []).every((g) => !('text' in g) && !('messages' in g) && !('content' in g)));
 
 r = await req(`/api/ai/members/${aiId}/share`, { method: 'POST', body: { enabled: false }, j: jA });
 ok('重新关闭分享', r.status === 200 && r.json?.enabled === false);

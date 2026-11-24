@@ -3150,6 +3150,10 @@ async function openShareSettings(m) {
           <span>允许它用插件 / 扩展（暂未开放，默认只读）</span>
         </label>
         <div class="ai-tip">今天：${cfg.todayGuests || 0} 位朋友来找过它，一共 ${cfg.todayTotal || 0} 句。</div>
+        ${(cfg.guests || []).length ? `<div class="share-guests">
+          <div class="share-guests-title">今天来过的朋友（只能看到是谁、说了几句，看不到内容）</div>
+          ${cfg.guests.map((g) => `<div class="share-guest"><span>${esc(g.nickname)}</span><span>${g.count} 句</span></div>`).join('')}
+        </div>` : ''}
       </div>
       <div class="modal-foot">
         <button type="button" class="btn-plain modal-cancel">取消</button>
