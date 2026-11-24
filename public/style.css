@@ -2798,28 +2798,36 @@ body.pop-open #app-server-btn { display: none !important; }
   line-height: 1.5;
   color: var(--text-3);
 }
-/* ---- 从别的世界跳过来时的顶部横条 ---- */
+/* ---- 从别的世界跳过来时的横条（桌面在标题下方，手机贴底部） ---- */
 .crossworld-bar {
   position: fixed; z-index: 60;
   top: 64px; left: 50%; transform: translateX(-50%);
-  display: flex; align-items: center; gap: 10px;
+  display: flex; align-items: center; gap: 8px;
   max-width: calc(100vw - 32px);
-  padding: 7px 10px 7px 14px;
-  border-radius: 999px;
-  background: rgba(31, 41, 55, .92);
-  color: #fff; font-size: 12.5px; line-height: 1.3;
+  padding: 6px 8px 6px 12px;
+  border-radius: 12px;
+  background: rgba(31, 41, 55, .94);
+  color: #fff; font-size: 12.5px; line-height: 1.35;
   box-shadow: 0 6px 24px rgba(0, 0, 0, .22);
+  white-space: nowrap;
 }
+.crossworld-bar span { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .crossworld-bar b { font-weight: 600; }
 .crossworld-bar button {
-  border: 0; border-radius: 999px; cursor: pointer;
+  flex: none; border: 0; border-radius: 999px; cursor: pointer;
   padding: 4px 10px; font-size: 12px;
   background: rgba(255, 255, 255, .16); color: #fff;
 }
 .crossworld-bar button:hover { background: rgba(255, 255, 255, .26); }
 .crossworld-bar .crossworld-x { padding: 2px 7px; font-size: 13px; opacity: .8; }
 @media (max-width: 520px) {
-  .crossworld-bar { top: calc(env(safe-area-inset-top, 0px) + 52px); font-size: 12px; }
+  .crossworld-bar {
+    top: auto; bottom: calc(env(safe-area-inset-bottom, 0px) + 86px);
+    left: 8px; right: 8px; transform: none;
+    max-width: none; border-radius: 14px; font-size: 12px;
+    padding: 8px 8px 8px 12px;
+  }
+  .crossworld-bar span { flex: 1; }
 }
 /* ---- 分享设置：来聊过的朋友列表 ---- */
 .share-guests { margin-top: 12px; border-top: 1px solid var(--line); padding-top: 10px; }

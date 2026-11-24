@@ -3990,6 +3990,13 @@ function voiceSupported() {
 }
 
 async function startVoice() {
+  // 浏览器只在"安全上下文"里给麦克风：https，或 http://127.0.0.1 / localhost。
+  // 局域网 http://192.168.x.x 这种会被直接拒掉，得说清楚是地址的问题，不是手机坏了。
+  if (!window.isSecureContext) {
+    toast('这个地址不能录音（浏览器要求 https 或 127.0.0.1）。可以改用公网地址 ts.net，或切到「本机世界」');
+    return;
+  }
+
   if (recorder.active) return;
   if (!voiceSupported()) {
     return toast('这个环境不支持录音：手机要用 https 打开，或直接用电脑的 localhost');
@@ -4809,6 +4816,7 @@ function showCrossWorldBar(backTo) {
     <button type="button" class="crossworld-x" title="知道了">×</button>`;
   document.body.appendChild(el);
   el.querySelector('#crossworld-back').addEventListener('click', () => {
+    el.remove();
     location.href = backTo + '/';
   });
   el.querySelector('.crossworld-x').addEventListener('click', () => {

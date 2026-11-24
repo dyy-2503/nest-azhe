@@ -2619,6 +2619,9 @@ if (method === 'POST' && p === '/api/ai/members') {
 
 // 手机要录音必须走 HTTPS（浏览器只在安全上下文里给麦克风）。
 // 有证书文件就起 https，没有就 http——本地 localhost 调试不需要证书。
+// 中继模式：设了 NEST_RELAY_TO（比如 http://192.168.1.3:8787）就把所有请求转发给
+// 真正在跑的那台（手机本地世界），自己只当"中转站 + 缓存"。
+const RELAY_TO = String(process.env.NEST_RELAY_TO || '').trim().replace(/\/+$/, '');
 const TLS_CERT = process.env.NEST_TLS_CERT || '';
 const TLS_KEY = process.env.NEST_TLS_KEY || '';
 const TLS_PFX = process.env.NEST_TLS_PFX || '';
@@ -2630,7 +2633,41 @@ const tlsOpts = TLS_PFX
 
 const server = (USE_TLS ? https.createServer(tlsOpts, handler) : http.createServer(handler));
 
+/** 把请求原样转发给上游（SSE 也能透传：响应直接 pipe 回去） */
+function relayTo(req, res) {
+  const upstream = new URL(RELAY_TO);
+  const isHttps = upstream.protocol === 'https:';
+  const mod = isHttps ? https : http;
+  const opts = {
+    protocol: upstream.protocol,
+    hostname: upstream.hostname,
+    port: upstream.port || (isHttps ? 443 : 80),
+    path: req.url,
+    method: req.method,
+    headers: { ...req.headers, host: upstream.host },
+    timeout: 20000,
+  };
+  const proxied = mod.request(opts, (up) => {
+    res.writeHead(up.statusCode || 502, up.headers);
+    up.pipe(res);
+  });
+  proxied.on('timeout', () => proxied.destroy(new Error('上游超时')));
+  proxied.on('error', (err) => {
+    if (res.headersSent) { try { res.end(); } catch { /* ignore */ } return; }
+    const body = JSON.stringify({
+      error: 'relay_failed',
+      message: '中转站连不上本地世界（' + RELAY_TO + '）：' + (err.message || '未知错误'),
+      hint: '确认手机在同一个 Wi-Fi、DSHA 里本地世界在跑',
+    });
+    res.writeHead(502, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' });
+    res.end(body);
+  });
+  req.pipe(proxied);
+}
+
 async function handler(req, res) {
+  // 中继模式：自己什么都不算，全部转给真正的那台（手机本地世界）
+  if (RELAY_TO) return relayTo(req, res);
   const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
   try {
     if (url.pathname.startsWith('/api/')) return await api(req, res, url);
