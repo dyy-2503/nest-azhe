@@ -250,21 +250,33 @@ function renderConvList() {
     }
   }
 
-  const items = [...local, ...remote].sort((a, b) => {
+  // 原则（docs/ARCHITECTURE.md）：一条对话只属于一个世界。
+  // 主列表只放「当前世界」的会话；别的世界只以入口形式单独成段，不做副本、不能在这里发消息。
+  const localItems = local.sort((a, b) => {
     if (a.pinned !== b.pinned) return a.pinned ? -1 : 1;
     return b.at - a.at;
   });
+  const remoteItems = remote.sort((a, b) => b.at - a.at);
 
-  if (!items.length) {
+  if (!localItems.length && !remoteItems.length) {
     box.innerHTML = q
       ? '<div class="empty-hint" style="height:120px"><p>没有匹配的会话</p></div>'
       : '<div class="empty-hint" style="height:160px"><p>还没有会话</p><p class="empty-sub">点右上角 ＋ 建个群，或者在设置里用邀请码进群</p></div>';
     return;
   }
 
-  box.innerHTML = items
-    .map((it) => (it.type === 'local' ? convRowHtml(it.conv) : worldConvRowHtml(it.world, it.conv)))
-    .join('');
+  let html = localItems.map((it) => convRowHtml(it.conv)).join('');
+  if (!localItems.length) {
+    html += '<div class="empty-hint" style="height:90px"><p>这个世界的会话是空的</p></div>';
+  }
+  if (remoteItems.length) {
+    const worlds = [...new Set(remoteItems.map((it) => it.world.title || it.world.baseUrl))];
+    html += '<div class="conv-world-head">' +
+      esc(worlds.join('、')) +
+      ' 的会话 · 只能点过去聊，不在这里发</div>' +
+      remoteItems.map((it) => worldConvRowHtml(it.world, it.conv)).join('');
+  }
+  box.innerHTML = html;
 }
 
 /** 拉取"世界"（别的 Nest 服务器）的会话，用来合并进列表 */

@@ -2791,3 +2791,10 @@ body.pop-open #app-server-btn { display: none !important; }
   font-size: 11px; color: #0b7a3e; background: rgba(16, 185, 129, .12);
   border: 1px solid rgba(16, 185, 129, .3);
 }
+/* ---- 其它世界的入口段：和本世界的会话明确分开 ---- */
+.conv-world-head {
+  margin: 16px 8px 6px;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--text-3);
+}
