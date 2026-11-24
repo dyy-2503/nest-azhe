@@ -259,7 +259,44 @@ try {
     ok('成为好友后能私聊 AI', r.status === 200, `HTTP ${r.status}`);
   }
 
-  /* ---------- 群 + 消息 ---------- */
+  /* ---------- AI 分享（外人来找别人的 AI 聊） ---------- */
+console.log('\n== AI 分享 ==');
+const dmWithAi = r.json?.conv?.id;
+ok('已建立「B × 别人的 AI」私聊', !!dmWithAi, String(dmWithAi));
+
+r = await req(`/api/ai/members/${aiId}/share`, { j: jB });
+ok('非主人读不到分享设置', r.status === 403 || r.status === 404, `HTTP ${r.status}`);
+r = await req(`/api/ai/members/${aiId}/share`, { j: jA });
+ok('主人读到分享设置（默认关闭）', r.status === 200 && r.json?.enabled === false, JSON.stringify(r.json).slice(0, 120));
+
+r = await req('/api/message', { method: 'POST', body: { conv: dmWithAi, blocks: [{ t: 'text', v: '外人试试' }] }, j: jB });
+ok('没开分享时外人发不进来', r.status === 403 && r.json?.code === 'ai_share_off', `HTTP ${r.status} ${r.json?.code || ''}`);
+
+r = await req('/api/message', { method: 'POST', body: { conv: dmConv.id, blocks: [{ t: 'text', v: '主人照常聊' }] }, j: jA });
+ok('主人不受分享限制', r.status === 200, `HTTP ${r.status}`);
+
+r = await req(`/api/ai/members/${aiId}/share`, { method: 'POST', body: { enabled: true, dailyQuota: 2 }, j: jA });
+ok('主人打开分享 + 额度 2', r.status === 200 && r.json?.enabled === true && r.json?.dailyQuota === 2, JSON.stringify(r.json).slice(0, 120));
+
+r = await req('/api/message', { method: 'POST', body: { conv: dmWithAi, blocks: [{ t: 'text', v: '外人第1句' }] }, j: jB });
+ok('外人第 1 句能发', r.status === 200, `HTTP ${r.status}`);
+r = await req('/api/message', { method: 'POST', body: { conv: dmWithAi, blocks: [{ t: 'text', v: '外人第2句' }] }, j: jB });
+ok('外人第 2 句能发', r.status === 200, `HTTP ${r.status}`);
+r = await req('/api/message', { method: 'POST', body: { conv: dmWithAi, blocks: [{ t: 'text', v: '外人第3句' }] }, j: jB });
+ok('第 3 句撞额度被拒', r.status === 429 && r.json?.code === 'ai_share_quota', `HTTP ${r.status} ${r.json?.code || ''}`);
+
+r = await req(`/api/ai/members/${aiId}/share`, { j: jA });
+ok('分享设置能看到今日用量', Number(r.json?.todayTotal) >= 2 && Number(r.json?.todayGuests) >= 1, JSON.stringify(r.json).slice(0, 120));
+
+r = await req(`/api/ai/members/${aiId}/share`, { method: 'POST', body: { enabled: false }, j: jA });
+ok('重新关闭分享', r.status === 200 && r.json?.enabled === false);
+r = await req('/api/message', { method: 'POST', body: { conv: dmWithAi, blocks: [{ t: 'text', v: '关了还能发吗' }] }, j: jB });
+ok('关闭后外人又被拦', r.status === 403 && r.json?.code === 'ai_share_off', `HTTP ${r.status}`);
+
+r = await req('/api/ai/members/99999/share', { j: jA });
+ok('对不存在的 AI 返回 404', r.status === 404, `HTTP ${r.status}`);
+
+/* ---------- 群 + 消息 ---------- */
   console.log('\n== 群与消息 ==');
   r = await req('/api/conversation', { method: 'POST', body: { title: '测试群', memberIds: [meB.id] }, j: jA });
   ok('建群', r.status === 200, `HTTP ${r.status}`);

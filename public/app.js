@@ -3015,7 +3015,8 @@ async function openAiManager() {
           <button type="button" data-act="profile">资料</button>
           <button type="button" data-act="persona">人设</button>
           <button type="button" data-act="join">拉进群</button>
-          <button type="button" data-act="key">发钥匙</button>
+          <button type="button" data-act="share">分享</button>
+        <button type="button" data-act="key">发钥匙</button>
           <button type="button" data-act="revoke">停用</button>
           <button type="button" data-act="del" class="is-danger">删除</button>
         </div>
@@ -3060,6 +3061,12 @@ async function openAiManager() {
         pickGroupAndAdd(members.find((m) => m.id === id) || { id, nickname: 'AI' });
         return;
       }
+      if (act === 'share') {
+        const { members } = await api('/api/ai/members');
+        const m = members.find((x) => x.id === id) || { id, nickname: 'AI' };
+        openShareSettings(m);
+        return;
+      }
       if (act === 'key') {
         const { key } = await api(`/api/ai/members/${id}/key`, { method: 'POST' });
         const nm = (mask.querySelector(`.ai-row[data-id="${id}"] .ai-row-name`)?.textContent || '').trim().split(/\s/)[0];
@@ -3099,6 +3106,68 @@ async function openAiManager() {
   mask.querySelector('#ai-guide').addEventListener('click', openAiGuide);
 
   await render();
+}
+
+/** 分享设置：决定别人能不能找这个 AI 聊、每天几句 */
+async function openShareSettings(m) {
+  let cfg;
+  try {
+    cfg = await api('/api/ai/members/' + m.id + '/share');
+  } catch (err) {
+    toast(err.message || '读不到分享设置');
+    return;
+  }
+  const mask = document.createElement('div');
+  mask.className = 'modal-mask';
+  mask.innerHTML = `
+    <div class="modal">
+      <div class="modal-head"><span>分享「${esc(m.nickname)}」</span></div>
+      <div class="modal-sub">开了之后，加过它好友的人可以私聊它。<b>每次都是独立会话</b>，你看不到别人和它的对话。</div>
+      <div class="modal-body">
+        <label class="share-row">
+          <input type="checkbox" id="share-enabled" ${cfg.enabled ? 'checked' : ''}>
+          <span>允许别人找它聊</span>
+        </label>
+        <label class="share-row">
+          <span>每个访客每天最多</span>
+          <input type="number" id="share-quota" min="0" max="1000" step="1" value="${Number(cfg.dailyQuota) || 0}">
+          <span>句（0 = 不限）</span>
+        </label>
+        <label class="share-row is-off" title="插件能读文件、发消息、花钱，所以现在只给主人用">
+          <input type="checkbox" disabled>
+          <span>允许它用插件 / 扩展（暂未开放，默认只读）</span>
+        </label>
+        <div class="ai-tip">今天：${cfg.todayGuests || 0} 位朋友来找过它，一共 ${cfg.todayTotal || 0} 句。</div>
+      </div>
+      <div class="modal-foot">
+        <button type="button" class="btn-plain modal-cancel">取消</button>
+        <button type="button" class="btn-solid" id="share-save">保存</button>
+      </div>
+    </div>`;
+  document.body.appendChild(mask);
+  const close = () => mask.remove();
+  mask.addEventListener('click', (e) => {
+    if (e.target === mask || e.target.closest('.modal-cancel')) close();
+  });
+  mask.querySelector('#share-save').addEventListener('click', async () => {
+    const btn = mask.querySelector('#share-save');
+    btn.disabled = true;
+    try {
+      await api('/api/ai/members/' + m.id + '/share', {
+        method: 'POST',
+        body: {
+          enabled: mask.querySelector('#share-enabled').checked,
+          dailyQuota: Number(mask.querySelector('#share-quota').value) || 0,
+        },
+      });
+      toast('分享设置已保存');
+      close();
+    } catch (err) {
+      toast(err.message || '保存失败');
+    } finally {
+      btn.disabled = false;
+    }
+  });
 }
 
 async function refreshAiCount() {

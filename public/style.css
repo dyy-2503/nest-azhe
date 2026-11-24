@@ -2777,3 +2777,11 @@ body.pop-open #app-server-btn { display: none !important; }
   flex: none;
 }
 .conv.world-entry:hover .world-jump { color: var(--accent); }
+/* ---- 分享设置 ---- */
+.share-row { display: flex; align-items: center; gap: 10px; padding: 10px 0; font-size: 14px; color: var(--text-2); }
+.share-row input[type="checkbox"] { width: 18px; height: 18px; flex: none; accent-color: var(--accent); }
+.share-row input[type="number"] {
+  width: 78px; padding: 6px 8px; border: 1px solid var(--line); border-radius: 8px;
+  background: var(--card); color: var(--text); font-size: 14px; text-align: center;
+}
+.share-row.is-off { opacity: .55; }

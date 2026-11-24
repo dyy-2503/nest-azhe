@@ -267,6 +267,15 @@ db.exec(`CREATE TABLE IF NOT EXISTS worlds (
   convs_json TEXT NOT NULL DEFAULT ''
 )`);
 
+// AI 分享：主人决定"别人能不能找它聊"，以及每个访客每天的额度
+db.exec(`CREATE TABLE IF NOT EXISTS ai_share (
+  ai_id INTEGER PRIMARY KEY,
+  enabled INTEGER NOT NULL DEFAULT 0,
+  daily_quota INTEGER NOT NULL DEFAULT 30,
+  allow_plugins INTEGER NOT NULL DEFAULT 0,
+  updated_at INTEGER NOT NULL DEFAULT 0
+)`);
+
 db.exec(`CREATE TABLE IF NOT EXISTS announcement_reads (
     conv_id INTEGER NOT NULL,
     user_id INTEGER NOT NULL,

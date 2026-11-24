@@ -120,6 +120,40 @@ async function readJson(req, limit = 1 << 20) {
 }
 
 /** 从 Authorization: Bearer 里取 AI 钥匙 */
+/** AI 分享设置：默认关闭（只有主人能聊） */
+function shareOf(aiId) {
+  const row = get('SELECT * FROM ai_share WHERE ai_id = ?', Number(aiId));
+  return {
+    enabled: !!(row && Number(row.enabled)),
+    dailyQuota: row ? Number(row.daily_quota) : 30,
+    allowPlugins: !!(row && Number(row.allow_plugins)),
+  };
+}
+
+function startOfToday() {
+  const d = new Date();
+  d.setHours(0, 0, 0, 0);
+  return d.getTime();
+}
+
+/** 外人来找这个 AI 聊时，判断要不要拦：返回 { status, error, code } 或 null */
+function aiShareDeny(aiId, convId, guestId) {
+  const share = shareOf(aiId);
+  if (!share.enabled) {
+    return { status: 403, error: '这个 AI 现在只跟主人聊（主人还没开分享）', code: 'ai_share_off' };
+  }
+  if (share.dailyQuota > 0) {
+    const used = Number(get(
+      'SELECT COUNT(*) AS n FROM messages WHERE conv_id = ? AND sender_id = ? AND created_at >= ?',
+      convId, guestId, startOfToday()
+    ).n);
+    if (used >= share.dailyQuota) {
+      return { status: 429, error: '今天的聊天额度用完了（' + share.dailyQuota + ' 条/天），明天再来', code: 'ai_share_quota' };
+    }
+  }
+  return null;
+}
+
 function aiKeyFromReq(req) {
   const m = /^Bearer\s+(NEST-AI-[a-z0-9]+)\s*$/i.exec(String(req.headers.authorization || ''));
   return m ? m[1] : '';
@@ -1071,7 +1105,18 @@ async function api(req, res, url) {
       return json(res, 403, { error: `你被禁言了，还有 ${left} 分钟` });
     }
 
-    const clientId = String(body.clientId || '').slice(0, 64);
+    // AI 分享限制：真人去私聊别人的 AI 时，看主人开没开、额度还剩多少
+  const agentPeer = get(
+    `SELECT u.* FROM users u JOIN members m ON m.user_id = u.id
+      WHERE m.conv_id = ? AND u.kind = 'agent' AND u.id <> ? LIMIT 1`,
+    convId, user.id
+  );
+  if (agentPeer && user.kind === 'human' && Number(agentPeer.owner_id) !== Number(user.id)) {
+    const deny = aiShareDeny(agentPeer.id, convId, user.id);
+    if (deny) return json(res, deny.status, { error: deny.error, code: deny.code });
+  }
+
+  const clientId = String(body.clientId || '').slice(0, 64);
 
     // 幂等：双击发送 / 网络重试用同一个 clientId，只落一条
     if (clientId) {
@@ -2296,7 +2341,47 @@ if (method === 'GET' && p === '/api/server-info') {
     return json(res, 200, { members });
   }
 
-  if (method === 'POST' && p === '/api/ai/members') {
+  // 分享设置：主人决定别人能不能找这个 AI 聊、每天能说几句
+if ((method === 'GET' || method === 'POST') && /^\/api\/ai\/members\/\d+\/share$/.test(p)) {
+  const me = requireUser(req);
+  const aiId = Number(p.split('/')[4]);
+  const ai = get('SELECT * FROM users WHERE id = ? AND owner_id = ? AND kind = ?', aiId, me.id, 'agent');
+  if (!ai) return json(res, 404, { error: '没找到这个 AI 成员' });
+
+  if (method === 'POST') {
+    const body = await readJson(req);
+    const enabled = body.enabled ? 1 : 0;
+    const quota = Math.max(0, Math.min(1000, Number(body.dailyQuota ?? 30) || 0));
+    const allowPlugins = body.allowPlugins ? 1 : 0;
+    run(
+      `INSERT INTO ai_share (ai_id, enabled, daily_quota, allow_plugins, updated_at) VALUES (?,?,?,?,?)
+       ON CONFLICT(ai_id) DO UPDATE SET enabled=excluded.enabled, daily_quota=excluded.daily_quota,
+         allow_plugins=excluded.allow_plugins, updated_at=excluded.updated_at`,
+      aiId, enabled, quota, allowPlugins, now()
+    );
+  }
+
+  const share = shareOf(aiId);
+  // 统计：今天有多少外人来找它、一共说了多少句
+  const since = startOfToday();
+  const todayTotal = Number(get(
+    `SELECT COUNT(*) AS n FROM messages msg JOIN users u ON u.id = msg.sender_id
+      WHERE msg.created_at >= ? AND u.kind = 'human' AND msg.sender_id <> ?
+        AND msg.conv_id IN (SELECT c.id FROM conversations c WHERE c.kind = 'dm'
+          AND EXISTS (SELECT 1 FROM members m WHERE m.conv_id = c.id AND m.user_id = ?))`,
+    since, Number(ai.owner_id) || 0, aiId
+  ).n);
+  const todayGuests = Number(get(
+    `SELECT COUNT(DISTINCT msg.sender_id) AS n FROM messages msg JOIN users u ON u.id = msg.sender_id
+      WHERE msg.created_at >= ? AND u.kind = 'human' AND msg.sender_id <> ?
+        AND msg.conv_id IN (SELECT c.id FROM conversations c WHERE c.kind = 'dm'
+          AND EXISTS (SELECT 1 FROM members m WHERE m.conv_id = c.id AND m.user_id = ?))`,
+    since, Number(ai.owner_id) || 0, aiId
+  ).n);
+  return json(res, 200, { ...share, todayTotal, todayGuests });
+}
+
+if (method === 'POST' && p === '/api/ai/members') {
     const me = requireUser(req);
     if (me.kind === 'agent') return json(res, 403, { error: 'AI 账号不能再建 AI' });
     const body = await readJson(req);
