@@ -403,3 +403,31 @@
 ### 记忆方案 5/6 条按建议默认（用户未反对，记录可改）
 - 5 群聊：**群聊一律只用公共层**（群里朋友看得见，AI 不提私事）；以后可加"群内允许私人记忆"开关，默认关
 - 6 换宿主：**memory_notes 跟着 Nest 库搬**；nmem 尽量一起导出/导入，搬不动就让 AI 在新宿重建
+
+### 完成记录（2026-11-25 晚 · 记忆卡片 v2 落地（PC 侧））
+按 MEMORY-DESIGN v2 实现，未部署手机（用户把手机拿走了）。
+
+**数据层** `server/db.mjs`
+- 新表 `memory_notes`：kind(person/event/guest)、subject_id/subject_name、guest_id、text、visibility、sensitive、weight、reinforce、last_used_at、pending_shared
+- 辅助函数：list/add/update/delete/touch
+
+**接口层** `server/index.mjs`
+- `GET /api/ai/(:id/)memory/context?viewer=&conv=`：桥接问"这轮用哪本账"；主人私聊 → 跳过（nmem 已有）；访客/群聊 → 人物档案(shared 且非敏感) + 自己的访客记忆
+- 主人管理：`GET/POST /api/ai/:id/memory/notes`、`PATCH/DELETE .../:noteId`、`POST .../:noteId/approve|reject`
+- AI 自己写记忆：agent 钥匙可 POST 到自己的 notes，**强制 private + pending_shared=1**（主人批了才共享），且不能代写 guest 记忆
+
+**桥接层** `bridge/nest-bridge.mjs`
+- 入队带上 senderId/senderKind/convId
+- 每轮真人消息前拉 `/api/ai/memory/context`；mode≠owner 时注入「人物记忆 + 该访客自己的记忆」并加约束（自然聊、不提敏感、不说"我记得你以前说过"）
+- 解析 AI 回复里的 `[记|person|阿哲|喜欢猫]`、`[记|event|事情]` 标记：存成待批记忆，标记本身不发出去
+- 人设提示里告诉 AI 这套标记怎么用
+
+**界面** `public/app.js` + `style.css`
+- AI 资料页新增「记忆卡片」入口（有待批会标出条数）
+- 面板：待确认申请（通过/拒绝）、人物档案（加/删/标敏感）、事件记忆（加/删）、访客记忆（只看条数）
+
+**验证**
+- selftest：**164 通过 / 0 失败**（新增 21 条断言：分层可见性、敏感遮挡、访客隔离、AI 写记忆待批、假钥匙被拒…）
+- 真浏览器（headless Edge，1280×900）跑通面板：分区正确、人物带名字、点"通过"后待批消失
+- 遗留：手机本地世界还没部署（等手机回来推离线包 + 重启）
+

@@ -1491,6 +1491,11 @@ async function openAiProfile(member) {
     mem = await api(`/api/ai/${member.id}/memory`);
   } catch {}
 
+  let memo = null;
+  try {
+    memo = await api(`/api/ai/${member.id}/memory/notes`);
+  } catch {}
+
   const mask = document.createElement('div');
   mask.className = 'modal-mask';
   mask.innerHTML = `
@@ -1535,6 +1540,12 @@ async function openAiProfile(member) {
             <span>主动说话</span>
             <i class="cap-hint">没人 @ 也接话；关掉=只回 @</i>
           </label>
+        </div>
+
+        <div class="ga-field" style="margin-top:16px">
+          <label>记忆卡片</label>
+          <div class="ai-tip">人物档案跨对话共享（AI 记得住人）；事件记忆只有你能问。</div>
+          <button type="button" class="btn-plain" id="pf-memcards">管理记忆卡片${memo?.pending?.length ? `（${memo.pending.length} 条待确认）` : ''}</button>
         </div>
 
         ${mem && !mem.missing ? `
@@ -2388,6 +2399,114 @@ function promptText({ title, label = '', value = '', placeholder = '', confirm =
   });
 }
 
+/** 记忆卡片管理：人物档案（共享）/ 事件（私有）/ 待确认申请 */
+async function openMemoryCards(member) {
+  let data;
+  try {
+    data = await api(`/api/ai/${member.id}/memory/notes`);
+  } catch (err) {
+    return toast(err.message || '打不开记忆');
+  }
+  const mask = document.createElement('div');
+  mask.className = 'modal-mask';
+  mask.innerHTML = `<div class="modal" style="width:560px;max-height:84vh">
+    <div class="modal-head"><span>${esc(member.nickname)} 的记忆</span></div>
+    <div class="modal-body" style="overflow:auto" id="mem-body"></div>
+    <div class="prompt-actions"><button type="button" class="prompt-cancel">关闭</button></div>
+  </div>`;
+  document.body.appendChild(mask);
+  const close = () => mask.remove();
+  mask.addEventListener('mousedown', (e) => { if (e.target === mask) close(); });
+  mask.querySelector('.prompt-cancel').addEventListener('click', close);
+
+  const body = mask.querySelector('#mem-body');
+  const row = (n) => `<div class="mem-row" data-id="${n.id}">
+      <div class="mem-text">${n.kind === 'person' && n.subject_name ? `${esc(n.subject_name)}：` : ''}${esc(n.text)}</div>
+      <div class="mem-acts">
+        ${n.kind === 'person' ? `<button type="button" class="btn-plain" data-act="sens" data-id="${n.id}" data-on="${n.sensitive ? 1 : 0}">${n.sensitive ? '取消敏感' : '标为敏感'}</button>` : ''}
+        <button type="button" class="btn-plain" data-act="del" data-id="${n.id}">删</button>
+      </div>
+    </div>`;
+
+  const render = () => {
+    const { people = [], pending: pendingRaw = [], guestCounts = [] } = data;
+    const pending = pendingRaw;
+    const pendingIds = new Set(pending.map((n) => n.id));
+    const events = (data.events || []).filter((n) => !pendingIds.has(n.id));
+    body.innerHTML = `
+      ${pending.length ? `<div class="mem-sec">
+        <div class="mem-sec-title">等你确认（AI 想把这几条变成可共享）</div>
+        ${pending.map((n) => `<div class="mem-row" data-id="${n.id}">
+          <div class="mem-text">${esc(n.text)}</div>
+          <div class="mem-acts">
+            <button type="button" class="btn-plain" data-act="approve" data-id="${n.id}">通过</button>
+            <button type="button" class="btn-plain" data-act="reject" data-id="${n.id}">拒绝</button>
+          </div>
+        </div>`).join('')}
+      </div>` : ''}
+      <div class="mem-sec">
+        <div class="mem-sec-title">人物档案 · ${people.length} 条<span class="ai-tip">（跨对话共享：AI 跟谁聊都记得这些人；敏感的不外说）</span></div>
+        ${people.length ? people.map(row).join('') : '<div class="ai-tip">还没有人物档案</div>'}
+        <div class="mem-add">
+          <input class="mem-name" placeholder="谁（名字）" maxlength="16">
+          <input class="mem-new" placeholder="他/她有什么特点，比如：喜欢猫，做设计" maxlength="120">
+          <button type="button" class="btn-plain" data-add="person">加人物</button>
+        </div>
+      </div>
+      <div class="mem-sec">
+        <div class="mem-sec-title">事件记忆 · ${events.length} 条<span class="ai-tip">（默认私有：访客看不到）</span></div>
+        ${events.length ? events.map(row).join('') : '<div class="ai-tip">还没有事件记忆</div>'}
+        <div class="mem-add">
+          <input class="mem-new" placeholder="记一件发生过的事，比如：上周说想换工作" maxlength="120">
+          <button type="button" class="btn-plain" data-add="event">加事件</button>
+        </div>
+      </div>
+      ${guestCounts.length ? `<div class="mem-sec">
+        <div class="mem-sec-title">访客留下的记忆（只能看条数）</div>
+        ${guestCounts.map((g) => `<div class="mem-row"><div class="mem-text">${esc(g.nickname)} · ${g.count} 条</div></div>`).join('')}
+      </div>` : ''}
+    `;
+  };
+  render();
+
+  const refresh = async () => {
+    data = await api(`/api/ai/${member.id}/memory/notes`);
+    render();
+  };
+
+  body.addEventListener('click', async (e) => {
+    const btn = e.target.closest('[data-act], [data-add]');
+    if (!btn) return;
+    try {
+      if (btn.dataset.add) {
+        const sec = btn.closest('.mem-sec');
+        const name = (sec.querySelector('.mem-name')?.value || '').trim();
+        const text = (sec.querySelector('.mem-new')?.value || '').trim();
+        if (!text) return toast('写点什么');
+        if (btn.dataset.add === 'person' && !name) return toast('写下是谁');
+        await api(`/api/ai/${member.id}/memory/notes`, {
+          method: 'POST',
+          body: btn.dataset.add === 'person'
+            ? { kind: 'person', text, subjectName: name, visibility: 'shared' }
+            : { kind: 'event', text, visibility: 'private' },
+        });
+        await refresh();
+        return;
+      }
+      const id = btn.dataset.id;
+      if (btn.dataset.act === 'del') {
+        await api(`/api/ai/${member.id}/memory/notes/${id}`, { method: 'DELETE' });
+      } else if (btn.dataset.act === 'sens') {
+        await api(`/api/ai/${member.id}/memory/notes/${id}`, { method: 'PATCH', body: { sensitive: btn.dataset.on !== '1' } });
+      } else if (btn.dataset.act === 'approve' || btn.dataset.act === 'reject') {
+        await api(`/api/ai/${member.id}/memory/notes/${id}/${btn.dataset.act}`, { method: 'POST' });
+      }
+      await refresh();
+    } catch (err) {
+      toast(err.message || '没改成');
+    }
+  });
+}
 /* ---- 接入说明：把「创建 → 进群 → 钥匙 → 跑起来」讲清楚 ---- */
 
 function openAiGuide() {
@@ -3552,6 +3671,7 @@ function pushRecentEmoji(ch) {
 }
 
 window.__nestLooksAnimated = looksAnimated;
+window.__openMemoryCards = (m) => openMemoryCards(m);
 
 function buildEmojiPanel() {
   const panel = $('#emoji-panel');

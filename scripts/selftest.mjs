@@ -298,6 +298,78 @@ ok('关闭后外人又被拦', r.status === 403 && r.json?.code === 'ai_share_of
 r = await req('/api/ai/members/99999/share', { j: jA });
 ok('对不存在的 AI 返回 404', r.status === 404, `HTTP ${r.status}`);
 
+
+  /* ---------- 记忆卡片（人物档案 / 事件 / 访客） ---------- */
+  console.log('\n== 记忆卡片 ==');
+  const memAdd = (kind, text, extra = {}) =>
+    req(`/api/ai/${aiId}/memory/notes`, { method: 'POST', body: { kind, text, ...extra }, j: jA });
+
+  r = await memAdd('person', '喜欢猫，做设计', { subjectName: '阿哲', visibility: 'shared' });
+  ok('加人物档案（共享）', r.status === 200 && r.json?.note?.kind === 'person', `HTTP ${r.status}`);
+  const personId = r.json?.note?.id;
+  r = await memAdd('person', '欠我两千块', { subjectName: '阿哲', visibility: 'shared', sensitive: 1 });
+  const sensId = r.json?.note?.id;
+  r = await memAdd('event', '上周说想换工作');
+  const eventId = r.json?.note?.id;
+  ok('加事件记忆（私有）', !!eventId);
+
+  r = await req(`/api/ai/${aiId}/memory/notes`, { j: jB });
+  ok('非主人读不到记忆卡片', r.status === 403 || r.status === 404, `HTTP ${r.status}`);
+
+  r = await req(`/api/ai/${aiId}/memory/context?viewer=${meA.id}&conv=0`, { key: aiKey });
+  ok('主人视角走 nmem（不重复注入）', r.status === 200 && r.json?.mode === 'owner', `HTTP ${r.status} ${String(r.text || '').slice(0, 120)}`);
+
+  r = await req(`/api/ai/${aiId}/memory/context?viewer=${meB.id}&conv=0`, { key: aiKey });
+  {
+    const txt = String(r.json?.text || '');
+    ok('访客视角拿到人物档案', r.status === 200 && r.json?.mode === 'guest' && txt.includes('喜欢猫'), `HTTP ${r.status} mode=${r.json?.mode} text=${txt.slice(0, 120)}`);
+    ok('访客看不到敏感条目', !txt.includes('两千'));
+    ok('访客看不到事件记忆', !txt.includes('换工作'));
+  }
+
+  // 访客自己的记忆：只对他自己生效
+  r = await memAdd('guest', '自己说喜欢篮球', { guestId: meB.id });
+  ok('记录访客记忆', r.status === 200 && r.json?.note?.kind === 'guest');
+  r = await req(`/api/ai/${aiId}/memory/context?viewer=${meB.id}&conv=0`, { key: aiKey });
+  ok('访客能看到自己的记忆', String(r.json?.text || '').includes('篮球'), `HTTP ${r.status} ${String(r.json?.text || '').slice(0, 120)}`);
+  r = await req(`/api/ai/${aiId}/memory/context?viewer=${meA.id}&conv=0`, { key: aiKey });
+  ok('主人 context 里没有访客内容', !String(r.json?.text || '').includes('篮球'));
+
+  // 管理列表：主人看得到条数，看不到访客内容
+  r = await req(`/api/ai/${aiId}/memory/notes`, { j: jA });
+  {
+    const j = r.json || {};
+    ok('记忆列表分人物/事件/待批', r.status === 200 && Array.isArray(j.people) && Array.isArray(j.events) && Array.isArray(j.pending));
+    ok('访客记忆只给条数', (j.guestCounts || []).some((g) => g.guestId === meB.id && g.count >= 1) && !JSON.stringify(j).includes('篮球'));
+  }
+
+  // 转共享要主人批：先把它标成待批，再通过
+  r = await req(`/api/ai/${aiId}/memory/notes/${eventId}`, { method: 'PATCH', body: { pendingShared: true }, j: jA });
+  ok('事件可以申请转共享', r.status === 200 && r.json?.note?.pending_shared === 1);
+  r = await req(`/api/ai/${aiId}/memory/notes`, { j: jA });
+  ok('待批列表里能看到申请', (r.json?.pending || []).some((n) => n.id === eventId));
+  r = await req(`/api/ai/${aiId}/memory/notes/${eventId}/approve`, { method: 'POST', j: jA });
+  ok('主人通过后变共享', r.status === 200 && r.json?.note?.visibility === 'shared' && r.json?.note?.pending_shared === 0);
+
+  // AI 自己写记忆 → 私有 + 待批；主人批了才共享
+  r = await req(`/api/ai/${aiId}/memory/notes`, { method: 'POST', body: { kind: 'person', text: '爱喝冰美式', subjectName: '阿哲' }, key: aiKey });
+  ok('AI 能给自己写记忆（先私有）', r.status === 200 && r.json?.note?.visibility === 'private' && r.json?.note?.pending_shared === 1, `HTTP ${r.status} ${JSON.stringify(r.json?.note || {}).slice(0, 100)}`);
+  const aiNoteId = r.json?.note?.id;
+  r = await req(`/api/ai/${aiId}/memory/context?viewer=${meB.id}&conv=0`, { key: aiKey });
+  ok('AI 写的还没批，访客看不到', !String(r.json?.text || '').includes('冰美式'));
+  r = await req(`/api/ai/${aiId}/memory/notes/${aiNoteId}/approve`, { method: 'POST', j: jA });
+  ok('主人批准后 AI 写的变共享', r.status === 200 && r.json?.note?.visibility === 'shared');
+  r = await req(`/api/ai/${aiId}/memory/context?viewer=${meB.id}&conv=0`, { key: aiKey });
+  ok('批准后访客能看到', String(r.json?.text || '').includes('冰美式'));
+  r = await req(`/api/ai/${aiId}/memory/notes`, { method: 'POST', body: { kind: 'event', text: 'x' }, key: 'NEST-AI-bad' });
+  ok('假钥匙写不了记忆', r.status === 401 || r.status === 403, `HTTP ${r.status}`);
+  // 主人把敏感条目关掉敏感 → 访客就能看到（证明敏感标记真的在挡）
+  r = await req(`/api/ai/${aiId}/memory/notes/${sensId}`, { method: 'PATCH', body: { sensitive: false }, j: jA });
+  r = await req(`/api/ai/${aiId}/memory/context?viewer=${meB.id}&conv=0`, { key: aiKey });
+  ok('取消敏感后访客就能看到', String(r.json?.text || '').includes('两千'), `HTTP ${r.status} ${String(r.json?.text || '').slice(0, 120)}`);
+
+  r = await req(`/api/ai/${aiId}/memory/notes/${personId}`, { method: 'DELETE', j: jA });
+  ok('删掉一条记忆卡片', r.status === 200);
 /* ---------- 群 + 消息 ---------- */
   console.log('\n== 群与消息 ==');
   r = await req('/api/conversation', { method: 'POST', body: { title: '测试群', memberIds: [meB.id] }, j: jA });

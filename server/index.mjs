@@ -17,6 +17,7 @@ import {
   all, get, run, tx, now, addMessage, getMessage, listMessages, isMember,
   conversationMembers, preview, publicUser, saveAttachment, hideMessage, capsOf, DEFAULT_CAPS,
   visibleMaxSeq, ROOT, MEDIA_DIR,
+  listMemoryNotes, addMemoryNote, updateMemoryNote, deleteMemoryNote, touchMemoryNote,
 } from './db.mjs';
 import { worldsForClient, addWorld, removeWorld, invalidateWorld } from './worlds.mjs';
 import {
@@ -2068,7 +2069,148 @@ if (method === 'POST' && p === '/api/extensions/remove') {
     });
   }
 
-  /* ---- 记忆概况（只给这个 AI 的主人看）---- */
+  /* ---- 记忆卡片：人物档案 / 事件 / 访客 ---- */
+
+/** 一条记忆写成人话 */
+function noteLine(n) {
+  const who = n.subject_name || (n.subject_id ? (get('SELECT nickname FROM users WHERE id = ?', n.subject_id)?.nickname || '') : '');
+  if (n.kind === 'person' && who) return `- ${who}：${n.text}`;
+  return `- ${n.text}`;
+}
+
+/**
+ * 组装这次对话能用哪本记忆账。
+ * 主人私聊：nmem 本来就有，这里跳过（避免重复）。
+ * 访客 / 群聊：人物档案(共享且不敏感) + 自己的访客记忆；不注入事件。
+ */
+function memoryContextFor(ai, viewerId, convId) {
+  const isOwner = Number(viewerId) === Number(ai.owner_id);
+  const conv = convId ? get('SELECT kind FROM conversations WHERE id = ?', convId) : null;
+  const isGroup = conv?.kind === 'group';
+  if (isOwner && !isGroup) return { mode: 'owner', skip: true, text: '' };
+  const people = all(
+    `SELECT * FROM memory_notes WHERE ai_id = ? AND kind = 'person'
+      AND visibility = 'shared' AND sensitive = 0 ORDER BY weight DESC, updated_at DESC LIMIT 60`, ai.id
+  );
+  const own = all(
+    `SELECT * FROM memory_notes WHERE ai_id = ? AND kind = 'guest' AND guest_id = ?
+      ORDER BY weight DESC, updated_at DESC LIMIT 40`, ai.id, Number(viewerId) || 0
+  );
+  const lines = [];
+  if (people.length) {
+    lines.push('【你记得这些人（可以自然聊起，敏感的事不外说）】');
+    for (const n of people) lines.push(noteLine(n));
+  }
+  if (own.length) {
+    lines.push('【眼前这个人以前告诉过你】');
+    for (const n of own) lines.push(noteLine(n));
+  }
+  return { mode: isGroup ? 'group-guest' : 'guest', people, own, text: lines.join('\n') };
+}
+
+/** 桥接用：这一轮该用哪本记忆账 */
+if (method === 'GET' && /^\/api\/ai\/(\d+\/)?memory\/context$/.test(p)) {
+  const me = requireUser(req);
+  if (me.kind !== 'agent') return json(res, 403, { error: '这是给 AI 账号用的接口' });
+  const q = new URL(req.url, 'http://x');
+  const viewer = Number(q.searchParams.get('viewer')) || 0;
+  const convId = Number(q.searchParams.get('conv')) || 0;
+  const ctx = memoryContextFor(me, viewer, convId);
+  const used = [...(ctx.people || []), ...(ctx.own || [])].map((n) => n.id);
+  for (const id of used.slice(0, 60)) touchMemoryNote(id);
+  return json(res, 200, { mode: ctx.mode, text: ctx.text || '', count: used.length });
+}
+
+/* ---- 记忆卡片管理（只给主人）---- */
+const noteOwnedBy = (aiId, noteId) => get('SELECT * FROM memory_notes WHERE id = ? AND ai_id = ?', Number(noteId), Number(aiId));
+
+if (method === 'GET' && /^\/api\/ai\/\d+\/memory\/notes$/.test(p)) {
+  const me = requireUser(req);
+  const aiId = Number(p.split('/')[3]);
+  const ai = get('SELECT * FROM users WHERE id = ? AND kind = ?', aiId, 'agent');
+  if (!ai) return json(res, 404, { error: '没有这个 AI' });
+  if (me.kind === 'agent' ? Number(me.id) !== aiId : Number(ai.owner_id) !== Number(me.id)) {
+    return json(res, 403, { error: '只有它的主人能看' });
+  }
+  const people = listMemoryNotes(aiId, { kind: 'person' });
+  const events = listMemoryNotes(aiId, { kind: 'event' });
+  const pending = all('SELECT * FROM memory_notes WHERE ai_id = ? AND pending_shared = 1 ORDER BY updated_at DESC', aiId);
+  const guestCounts = all(
+    `SELECT guest_id, COUNT(*) AS n FROM memory_notes WHERE ai_id = ? AND kind = 'guest' GROUP BY guest_id`, aiId
+  ).map((r) => ({
+    guestId: r.guest_id,
+    nickname: get('SELECT nickname FROM users WHERE id = ?', r.guest_id)?.nickname || '访客',
+    count: Number(r.n),
+  }));
+  return json(res, 200, { people, events, pending, guestCounts });
+}
+
+if (method === 'POST' && /^\/api\/ai\/\d+\/memory\/notes$/.test(p)) {
+  const me = requireUser(req);
+  const aiId = Number(p.split('/')[3]);
+  const ai = get('SELECT * FROM users WHERE id = ? AND kind = ?', aiId, 'agent');
+  if (!ai) return json(res, 404, { error: '没有这个 AI' });
+  const byAgent = me.kind === 'agent';
+  if (byAgent && Number(me.id) !== aiId) return json(res, 403, { error: '只能给自己写记忆' });
+  if (!byAgent && Number(ai.owner_id) !== Number(me.id)) return json(res, 403, { error: '只有它的主人能改' });
+  const body = await readJson(req);
+  const kind = String(body.kind || 'event');
+  if (!['person', 'event', 'guest'].includes(kind)) return json(res, 400, { error: 'kind 不对' });
+  if (byAgent && kind === 'guest') return json(res, 403, { error: '访客记忆不能由 AI 代写' });
+  const text = String(body.text || '').trim();
+  if (!text) return json(res, 400, { error: '写点什么' });
+  const note = addMemoryNote({
+    aiId, kind, text,
+    subjectId: body.subjectId || 0,
+    subjectName: body.subjectName || '',
+    guestId: body.guestId || 0,
+    // AI 写的只能是私有；想变共享必须主人批（pendingShared=1）
+    visibility: byAgent ? 'private' : (kind === 'person' ? (body.visibility || 'shared') : (body.visibility || 'private')),
+    sensitive: body.sensitive ? 1 : 0,
+    pendingShared: byAgent ? 1 : 0,
+  });
+  return json(res, 200, { note });
+}
+
+if (method === 'PATCH' && /^\/api\/ai\/\d+\/memory\/notes\/\d+$/.test(p)) {
+  const me = requireUser(req);
+  const parts = p.split('/');
+  const aiId = Number(parts[3]);
+  const noteId = Number(parts[6]);
+  const ai = get('SELECT * FROM users WHERE id = ? AND kind = ?', aiId, 'agent');
+  if (!ai) return json(res, 404, { error: '没有这个 AI' });
+  if (Number(ai.owner_id) !== Number(me.id)) return json(res, 403, { error: '只有它的主人能改' });
+  if (!noteOwnedBy(aiId, noteId)) return json(res, 404, { error: '没有这条记忆' });
+  const body = await readJson(req);
+  return json(res, 200, { note: updateMemoryNote(noteId, body) });
+}
+
+if (method === 'DELETE' && /^\/api\/ai\/\d+\/memory\/notes\/\d+$/.test(p)) {
+  const me = requireUser(req);
+  const parts = p.split('/');
+  const aiId = Number(parts[3]);
+  const noteId = Number(parts[6]);
+  const ai = get('SELECT * FROM users WHERE id = ? AND kind = ?', aiId, 'agent');
+  if (!ai) return json(res, 404, { error: '没有这个 AI' });
+  if (Number(ai.owner_id) !== Number(me.id)) return json(res, 403, { error: '只有它的主人能改' });
+  return json(res, deleteMemoryNote(noteId) ? 200 : 404, { ok: true });
+}
+
+/** 通过 / 拒绝"转成共享"的申请 */
+if (method === 'POST' && /^\/api\/ai\/\d+\/memory\/notes\/\d+\/(approve|reject)$/.test(p)) {
+  const me = requireUser(req);
+  const parts = p.split('/');
+  const aiId = Number(parts[3]);
+  const noteId = Number(parts[6]);
+  const action = parts[7];
+  const ai = get('SELECT * FROM users WHERE id = ? AND kind = ?', aiId, 'agent');
+  if (!ai) return json(res, 404, { error: '没有这个 AI' });
+  if (Number(ai.owner_id) !== Number(me.id)) return json(res, 403, { error: '只有它的主人能批' });
+  if (!noteOwnedBy(aiId, noteId)) return json(res, 404, { error: '没有这条记忆' });
+  if (action === 'approve') return json(res, 200, { note: updateMemoryNote(noteId, { visibility: 'shared', pendingShared: false }) });
+  return json(res, 200, { note: updateMemoryNote(noteId, { pendingShared: false }) });
+}
+/* ---- 记忆概况（只给这个 AI 的主人看）---- */
   if (method === 'GET' && /^\/api\/ai\/\d+\/memory$/.test(p)) {
     const me = requireUser(req);
     const aiId = Number(p.split('/')[3]);

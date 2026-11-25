@@ -276,6 +276,27 @@ db.exec(`CREATE TABLE IF NOT EXISTS ai_share (
   updated_at INTEGER NOT NULL DEFAULT 0
 )`);
 
+// 记忆卡片：person（人物档案，跨对话共享）/ event（事件，私有）/ guest（访客自己的）
+db.exec(`CREATE TABLE IF NOT EXISTS memory_notes (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  ai_id INTEGER NOT NULL,
+  kind TEXT NOT NULL,
+  subject_id INTEGER,
+  subject_name TEXT,
+  guest_id INTEGER,
+  text TEXT NOT NULL,
+  visibility TEXT NOT NULL DEFAULT 'private',
+  sensitive INTEGER NOT NULL DEFAULT 0,
+  weight REAL NOT NULL DEFAULT 1.0,
+  reinforce INTEGER NOT NULL DEFAULT 0,
+  last_used_at INTEGER,
+  pending_shared INTEGER NOT NULL DEFAULT 0,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+)`);
+db.exec('CREATE INDEX IF NOT EXISTS idx_notes_ai_kind ON memory_notes(ai_id, kind, visibility)');
+db.exec('CREATE INDEX IF NOT EXISTS idx_notes_subject ON memory_notes(ai_id, subject_id)');
+
 db.exec(`CREATE TABLE IF NOT EXISTS announcement_reads (
     conv_id INTEGER NOT NULL,
     user_id INTEGER NOT NULL,
@@ -502,6 +523,52 @@ export function conversationMembers(convId) {
 
 export function isMember(convId, userId) {
   return !!get('SELECT 1 AS x FROM members WHERE conv_id = ? AND user_id = ?', convId, userId);
+}
+
+/* ------------------------- 记忆卡片 ------------------------- */
+
+export function listMemoryNotes(aiId, { kind = '', visibility = '' } = {}) {
+  let sql = 'SELECT * FROM memory_notes WHERE ai_id = ?';
+  const args = [aiId];
+  if (kind) { sql += ' AND kind = ?'; args.push(kind); }
+  if (visibility) { sql += ' AND visibility = ?'; args.push(visibility); }
+  sql += ' ORDER BY weight DESC, updated_at DESC LIMIT 500';
+  return all(sql, ...args);
+}
+
+export function addMemoryNote({ aiId, kind, text, subjectId = 0, subjectName = '', guestId = 0, visibility = 'private', sensitive = 0, pendingShared = 0 }) {
+  const t = Date.now();
+  const info = run(
+    `INSERT INTO memory_notes (ai_id, kind, subject_id, subject_name, guest_id, text, visibility, sensitive, pending_shared, created_at, updated_at)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
+    aiId, kind, Number(subjectId) || 0, String(subjectName || ''), Number(guestId) || 0,
+    String(text).slice(0, 500), visibility, sensitive ? 1 : 0, pendingShared ? 1 : 0, t, t
+  );
+  return get('SELECT * FROM memory_notes WHERE id = ?', Number(info.lastInsertRowid));
+}
+
+export function updateMemoryNote(id, patch = {}) {
+  const row = get('SELECT * FROM memory_notes WHERE id = ?', id);
+  if (!row) return null;
+  const next = {
+    text: patch.text !== undefined ? String(patch.text).slice(0, 500) : row.text,
+    visibility: patch.visibility || row.visibility,
+    sensitive: patch.sensitive !== undefined ? (patch.sensitive ? 1 : 0) : row.sensitive,
+    pending_shared: patch.pendingShared !== undefined ? (patch.pendingShared ? 1 : 0) : row.pending_shared,
+  };
+  run('UPDATE memory_notes SET text = ?, visibility = ?, sensitive = ?, pending_shared = ?, updated_at = ? WHERE id = ?',
+    next.text, next.visibility, next.sensitive, next.pending_shared, Date.now(), id);
+  return get('SELECT * FROM memory_notes WHERE id = ?', id);
+}
+
+export function deleteMemoryNote(id) {
+  return run('DELETE FROM memory_notes WHERE id = ?', id).changes > 0;
+}
+
+/** 一条记忆被对话用到：加强权重 */
+export function touchMemoryNote(id, add = 0.3) {
+  run('UPDATE memory_notes SET weight = MIN(1.0, weight + ?), reinforce = reinforce + 1, last_used_at = ? WHERE id = ?',
+    add, Date.now(), id);
 }
 
 // 修复历史附件：早先按客户端声明的 MIME 入库，叫 .jpg 的动图被记成 image/jpeg，

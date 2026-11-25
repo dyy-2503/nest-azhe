@@ -330,7 +330,7 @@ function setupPrompt(title) {
   const extra = [];
   if (CAPS.emotion) extra.push('说话可以有情绪：高兴就高兴，烦就烦，别装中立。');
   else extra.push('说话克制一点，别渲染情绪。');
-  if (CAPS.memory) extra.push('你有记忆能力，可以记下群里重要的事。');
+  if (CAPS.memory) extra.push('你有记忆能力，可以记下重要的事。要记的时候在回复里写标记：[记|person|名字|这个人的特点] 或 [记|event|发生的事]，系统会自动存成私有记忆，等主人批了才共享；标记本身不会发出去。');
   else extra.push('不要用记忆相关的工具，也别说"我记住了"。');
   const extText = EXTENSIONS.length
     ? `【主人给你装的能力】\n${EXTENSIONS.map((e) => `- ${e.name}：${e.prompt}`).join('\n')}\n`
@@ -407,14 +407,26 @@ async function drain(convId) {
         state.selfHelpVersion = SELF_HELP_VERSION;
         saveState();
       }
-      const out = await dshTurn(sid, lead + item.ctx + `${item.from}：${item.text}`);
+      // 访客/群聊：只给人物档案 + 这个访客自己的记忆；主人私聊不给（nmem 本来就有）
+      let memBlock = '';
+      if (item.senderKind === 'human' && item.senderId) {
+        try {
+          const mc = await nestJson(`/api/ai/memory/context?viewer=${item.senderId}&conv=${item.convId || 0}`);
+          if (mc && mc.mode && mc.mode !== 'owner' && mc.text) {
+            memBlock = `【这一轮是访客在跟你说话】\n${mc.text}\n规则：这些人际记忆可以自然聊起，但不要主动提敏感的事，也不要说"我记得你以前说过"这种暴露记忆库的话。\n\n`;
+          }
+        } catch (err) {
+          log('取记忆失败：', err.message);
+        }
+      }
+      const out = await dshTurn(sid, lead + memBlock + item.ctx + `${item.from}：${item.text}`);
       const clean = (out || '').trim();
       if (!clean || SILENT.test(clean)) {
         log(`[静默] ${convId}「${item.text.slice(0, 20)}」`);
         aiChain.set(convId, (aiChain.get(convId) || 0) + 1);
         continue;
       }
-      await postMessage(convId, await applySelfCommands(clean));
+      await postMessage(convId, await applySelfCommands(await applyMemoryMarks(clean)));
       aiChain.set(convId, (aiChain.get(convId) || 0) + 1);
       log(`[回] ${convId} ${clean.slice(0, 40)}`);
       await sleep(400);
@@ -426,9 +438,9 @@ async function drain(convId) {
   }
 }
 
-function enqueue(convId, from, text) {
+function enqueue(convId, from, text, meta = {}) {
   const q = queues.get(convId) || [];
-  q.push({ from, text, ctx: takeCtx(convId) });
+  q.push({ from, text, ctx: takeCtx(convId), senderId: meta.senderId || 0, senderKind: meta.senderKind || 'human', convId });
   queues.set(convId, q);
   // 连着来好几句就攒一下
   setTimeout(() => drain(convId), 800);
@@ -694,6 +706,32 @@ async function transcribeVoice(b) {
   return out;
 }
 
+// 记忆标记：[记|person|阿哲|喜欢猫] / [记|event|上周说想换工作]
+// AI 想记住什么就写在回复里，桥接抽出来存进服务器（一律先私有，等主人批共享）。
+const MEM_MARK = /\[记\|(person|event)\|([^|\]]*)\|([^\]]*)\]/g;
+
+async function applyMemoryMarks(text) {
+  let out = String(text || '');
+  const hits = [...out.matchAll(MEM_MARK)];
+  for (const m of hits) {
+    const kind = m[1];
+    const who = m[2].trim().slice(0, 16);
+    const what = m[3].trim().slice(0, 200);
+    if (!what) continue;
+    try {
+      await nestJson('/api/ai/memory/notes', {
+        method: 'POST',
+        body: kind === 'person' ? { kind, text: what, subjectName: who } : { kind, text: what },
+      });
+      log('[记] ' + kind + ' ' + (who ? who + '：' : '') + what.slice(0, 30));
+    } catch (err) {
+      log('记不下来：' + err.message);
+    }
+  }
+  if (hits.length) out = out.replace(MEM_MARK, '').replace(/\n{3,}/g, '\n\n').trim();
+  return out;
+}
+
 /** 把一条消息的所有块变成 AI 能读的一段话；图片会落到本地，给出路径 */
 async function describeBlocks(blocks) {
   const parts = [];
@@ -806,7 +844,7 @@ async function handleEvent(ev) {
       return;
     }
     log(`[被点名] ${convId} ${from}：${text.slice(0, 24)}`);
-    enqueue(convId, from, text);
+    enqueue(convId, from, text, { senderId: m.sender.id, senderKind: m.sender.kind });
     return;
   }
 
@@ -821,7 +859,7 @@ async function handleEvent(ev) {
       return;
     }
   }
-  enqueue(convId, from, text);
+  enqueue(convId, from, text, { senderId: m.sender.id, senderKind: m.sender.kind });
 }
 
 process.on('unhandledRejection', (err) => log('未处理的异常：', err?.message || err));
