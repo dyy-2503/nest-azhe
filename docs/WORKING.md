@@ -390,3 +390,16 @@
   3. 静图：仍走裁剪，但导出格式改 PNG（`openCropper` 新增 `outMime` 参数），保住透明背景
   4. 调试钩子 `window.__nestLooksAnimated` 方便自动化验证
 - 待部署：手机断连，等插上后推一次离线包（`dist/nest-offline.tar.gz`）
+
+### 完成记录（2026-11-25 晚 · 表情包动图修复已部署验证）
+用户确认现象：**存成静态**（不是报错）。正是 `pickStickerFromFile → openCropper → canvas 导出 JPEG` 这个 bug。
+- 已部署到手机本地世界（手机重新插上 USB 后推送离线包）
+- 验证（真机）：
+  * 调试钩子 `window.__nestLooksAnimated`：GIF 伪装成 .jpg → 返回 `gif`；真 JPEG → 返回空 ✅
+  * 用接口把 3 帧动图加进表情 → 面板显示，两张截图对比**表情格子区域 30293/57600 像素在变**（真的在动）✅
+  * 历史附件 MIME：`image/jpeg → image/gif` ✅
+- 测试表情已从收藏里删掉，不留垃圾
+
+### 记忆方案 5/6 条按建议默认（用户未反对，记录可改）
+- 5 群聊：**群聊一律只用公共层**（群里朋友看得见，AI 不提私事）；以后可加"群内允许私人记忆"开关，默认关
+- 6 换宿主：**memory_notes 跟着 Nest 库搬**；nmem 尽量一起导出/导入，搬不动就让 AI 在新宿重建
