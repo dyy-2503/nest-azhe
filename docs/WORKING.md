@@ -431,3 +431,14 @@
 - 真浏览器（headless Edge，1280×900）跑通面板：分区正确、人物带名字、点"通过"后待批消失
 - 遗留：手机本地世界还没部署（等手机回来推离线包 + 重启）
 
+
+### 完成记录（2026-11-26 前夜 · 记忆卡片 v2 部署到手机并真机验证）
+手机插回后推送离线包，容器里跑 `deploy.sh`（tar 解压 → 重启 server+bridge）：
+- extract=0 / HTTP:200 / `app.js` 里 memory/notes 出现 7 次 / bridge 里 memory/context 1 处
+- 真机端到端检查（`memcheck.mjs`，跑完自清理）：
+  * 主人 context → mode=owner（不重复注入）
+  * 访客 context → mode=guest 条数=1：能看到人物档案，**看不到敏感条目、看不到事件记忆**
+  * AI 自己写记忆 → visibility=private、pending=1；批之前访客看不到；主人 approve 后变 shared、访客能看到
+  * 临时访客账号与测试记忆已自动删除，记忆恢复 0/0/0
+- 真机界面截图：`docs/memory-ui-phone.png`（人物档案/事件记忆分区、加/删/标敏感都在）
+- 说明：bridge 的注入逻辑随离线包一起更新，重启后生效
