@@ -342,3 +342,25 @@
 - 脚本：`scripts/fix-phone-timezone.sh`（用法写在脚本头）
 - 验证：容器 `date` → `Tue Nov 24 22:26 CST 2026`；bridge.log 由 `13:31` 变成 `22:27`；
   问 AI"现在几点"，回「22:28」（正确）；测试消息已清理
+
+### 完成记录（2026-11-25 中午 · 手机端「世界随时断」三连修）
+今早用户打开 Nest 显示「连不上」，打开 DSHA 也没用。查到三个独立问题，都修了：
+
+1. **后台冻结（用着用着断）**
+   - 现象：切到 Nest 后，容器里 8787 还在监听但连接全不处理（Recv-Q 堆积），回 DSHA 前台立刻恢复
+   - 修：`settings put global cached_apps_freezer disabled`（关掉"暂停执行已缓存的应用"）
+   - 实测：Nest 前台 180 秒仍 200
+
+2. **熄屏冻结（锁屏一阵就死）**
+   - 修：vivo 设置 → 电池 → 后台耗电管理 → 选「**允许后台耗电**」（原来是"智能控制"）
+   - 实测：锁屏 240 秒仍 200
+
+3. **没有自启动（DSHA 重启/手机重启后世界不起来）**
+   - 发现 `/usr/local/bin/dsh` 是符号链接到 `…/dsh/lib/bin.js`，此前装的 dns-compat.cjs 根本没人 require（是 DNS 补丁，不是自启动）
+   - 修：给 bin.js 顶部注入 NEST_AUTOSTART：`dsh web` 启动时 spawn `/root/nest-local/start.sh`
+   - 脚本：`scripts/fix-phone-autostart.sh` + `scripts/patch-dsh-autostart.mjs`
+   - 实测：**重启 DSHA 后 6 秒** 8787 自动 200，无需人工执行 start.sh
+
+**剩下的一步（无法自动化）**：手机重启后，DSHA 进程会自动在后台，但 DSHA 的「启动 DSH」需要手动点一次（vivo/DSHA 都没有"开机自启 DSH"的开关）。点完这一次之后，世界会自己起来，之后不再需要任何手动操作。
+
+**当前状态**：手机本机 / 电脑中继 / 公网 ts.net 三端都是同一个世界（sid 81241c16），App 正常显示会话「小肥鱼」。
