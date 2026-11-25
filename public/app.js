@@ -3551,6 +3551,8 @@ function pushRecentEmoji(ch) {
   try { localStorage.setItem('nest-recent-emoji', JSON.stringify(list)); } catch {}
 }
 
+window.__nestLooksAnimated = looksAnimated;
+
 function buildEmojiPanel() {
   const panel = $('#emoji-panel');
   const recent = recentEmoji();
@@ -3590,7 +3592,7 @@ function buildEmojiPanel() {
  * @param {string}  title   标题
  * @param {(blob: Blob) => void} onDone  确认后的回调
  */
-async function openCropper({ file, aspect = 1, maxOut = 512, title = '裁剪图片', onDone }) {
+async function openCropper({ file, aspect = 1, maxOut = 512, title = '裁剪图片', outMime = '', onDone }) {
   const url = URL.createObjectURL(file);
   let img;
   try {
@@ -3701,8 +3703,9 @@ async function openCropper({ file, aspect = 1, maxOut = 512, title = '裁剪图�
       const sh = vh / (base * st.scale);
       ctx.drawImage(img, sx, sy, sw, sh, 0, 0, outW, outH);
       // 头像是小图：用 JPEG 压到几十 KB，公网隧道下也能秒开（之前 PNG 512 有 400KB+）
-      const mime = outW <= 320 ? 'image/jpeg' : 'image/png';
-      const blob = await new Promise((res) => canvas.toBlob(res, mime, 0.86));
+      // 头像等小图默认 JPEG 压体积；表情/贴纸传 outMime='image/png' 以保住透明背景
+      const mime = outMime || (outW <= 320 ? 'image/jpeg' : 'image/png');
+      const blob = await new Promise((res) => canvas.toBlob(res, mime, mime === 'image/jpeg' ? 0.86 : undefined));
       if (!blob) throw new Error('导出失败');
       close();
       await onDone(blob);
@@ -3722,6 +3725,27 @@ const ADD_STICKER_CELL = `
     </button>
   </div>`;
 
+/** 看文件头判断是不是动图：GIF / 动画 WebP / APNG。扩展名撒谎也能认出来。 */
+async function looksAnimated(file) {
+  try {
+    const buf = new Uint8Array(await file.slice(0, 256).arrayBuffer());
+    const ascii = (from, to) => String.fromCharCode(...buf.slice(from, to));
+    if (buf.length >= 6 && (ascii(0, 6) === 'GIF87a' || ascii(0, 6) === 'GIF89a')) return 'gif';
+    if (buf.length >= 12 && ascii(0, 4) === 'RIFF' && ascii(8, 12) === 'WEBP' && ascii(12, 16) === 'VP8X') {
+      // VP8X 头里第 1 个标志字节的 bit1 = 动画
+      if (buf[20] & 0x02) return 'webp';
+    }
+    if (buf.length >= 8 && buf[0] === 0x89 && ascii(1, 4) === 'PNG') {
+      // APNG：PNG 里出现 acTL 块
+      const head = ascii(0, 256);
+      if (head.includes('acTL')) return 'apng';
+    }
+    return '';
+  } catch {
+    return '';
+  }
+}
+
 /** 选一张图 → 裁剪 → 存成表情 */
 function pickStickerFromFile() {
   const picker = document.createElement('input');
@@ -3729,14 +3753,31 @@ function pickStickerFromFile() {
   picker.accept = 'image/png,image/jpeg,image/gif,image/webp';
   picker.style.position = 'fixed';
   picker.style.left = '-9999px';
-  picker.onchange = () => {
+  picker.onchange = async () => {
     const f = picker.files && picker.files[0];
     picker.remove();
     if (!f) return;
+    // 动图（GIF / 动画 WebP / APNG）不能过 canvas 裁剪——一裁就只剩第一帧。
+    // 直接原样上传，表情面板里照样会动。
+    const anim = await looksAnimated(f);
+    if (anim) {
+      try {
+        toast('动图原样存进表情（不裁剪）…');
+        const type = anim === 'gif' ? 'image/gif' : anim === 'webp' ? 'image/webp' : 'image/png';
+        const up = await api('/api/upload', { method: 'POST', raw: f, type });
+        await api('/api/stickers', { method: 'POST', body: { sha: up.sha, ext: up.ext } });
+        toast('已存进表情（动图会动）');
+        loadStickers();
+      } catch (err) {
+        toast(err.message || '存不了');
+      }
+      return;
+    }
     openCropper({
       file: f,
       aspect: 1,
       maxOut: 320,
+      outMime: 'image/png',
       title: '裁成表情（1:1）',
       onDone: async (blob) => {
         try {

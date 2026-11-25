@@ -378,3 +378,15 @@
      是动图就写"发了张动图（多帧，你可以打开看每一帧）"
 - 已部署到手机本地世界并验证：旧附件 `image/jpeg → image/gif`，新上传整条链路 `image/gif`
 - selftest 142 通过 0 失败
+
+### 完成记录（2026-11-25 傍晚 · 「添加表情包」吃动图的 bug）
+用户点出真凶：不是聊天里发图，是 **「添加图片为表情」** 这个功能。
+- 原因：`pickStickerFromFile()` 一律走 `openCropper({maxOut:320})`，裁剪器用 canvas 重绘后导出
+  **image/jpeg** —— 动图当场变静态，透明背景也被压成白底
+- 修法：
+  1. 新增 `looksAnimated(file)`：看文件头判断 GIF / 动画 WebP（VP8X 动画位）/ APNG（acTL 块），
+     扩展名撒谎也能认出来
+  2. 动图：**跳过裁剪，原样上传**存进表情（面板里照样会动），提示"动图原样存进表情（不裁剪）"
+  3. 静图：仍走裁剪，但导出格式改 PNG（`openCropper` 新增 `outMime` 参数），保住透明背景
+  4. 调试钩子 `window.__nestLooksAnimated` 方便自动化验证
+- 待部署：手机断连，等插上后推一次离线包（`dist/nest-offline.tar.gz`）
