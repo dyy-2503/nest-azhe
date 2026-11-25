@@ -504,12 +504,32 @@ export function isMember(convId, userId) {
   return !!get('SELECT 1 AS x FROM members WHERE conv_id = ? AND user_id = ?', convId, userId);
 }
 
+// 修复历史附件：早先按客户端声明的 MIME 入库，叫 .jpg 的动图被记成 image/jpeg，
+// 严格的浏览器/图片工具会当成坏图。按扩展名把 MIME 纠正一遍（幂等）。
+function fixAttachmentMimes() {
+  const map = {
+    '.png': 'image/png', '.jpg': 'image/jpeg', '.gif': 'image/gif', '.webp': 'image/webp',
+    '.mp4': 'video/mp4', '.mov': 'video/quicktime', '.webm': 'video/webm',
+    '.ogg': 'audio/ogg', '.mp3': 'audio/mpeg', '.wav': 'audio/wav',
+    '.pdf': 'application/pdf', '.zip': 'application/zip',
+  };
+  try {
+    for (const [ext, mime] of Object.entries(map)) {
+      run('UPDATE attachments SET mime = ? WHERE ext = ? AND mime <> ?', mime, ext, mime);
+    }
+  } catch (e) {
+    console.error('[nest] 修复附件 MIME 失败', e.message);
+  }
+}
+// 等模块初始化完成后跑（run/语句在下面才建好）
+setTimeout(fixAttachmentMimes, 0);
+
 export function saveAttachment(sha, mime, bytes, ext, ownerId = 0) {
   // 内容寻址：同一份文件只存一次。owner 记录首次上传者（配额按它统计）。
   run(
     `INSERT INTO attachments (sha, mime, bytes, ext, owner_id, created_at)
      VALUES (?,?,?,?,?,?)
-     ON CONFLICT(sha) DO NOTHING`,
+     ON CONFLICT(sha) DO UPDATE SET mime = excluded.mime, ext = excluded.ext`,
     sha, mime, bytes, ext, Number(ownerId) || 0, now()
   );
   return get('SELECT * FROM attachments WHERE sha = ?', sha);

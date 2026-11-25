@@ -702,7 +702,9 @@ async function describeBlocks(blocks) {
     if (b.t === 'image') {
       const url = `${SERVER}/media/${b.sha}${b.ext || '.png'}`;
       const local = await saveMedia(b, 'image');
-      parts.push(local ? `[发了张图片，已存到本机 ${local}]` : `[发了张图片：${url}]`);
+      const isAnim = await isAnimatedImage(b, url);
+      const what = isAnim ? '发了张动图（多帧，你可以打开看每一帧）' : '发了张图片';
+      parts.push(local ? `[${what}，已存到本机 ${local}]` : `[${what}：${url}]`);
       continue;
     }
     if (b.t === 'file') {
@@ -726,6 +728,26 @@ async function describeBlocks(blocks) {
     }
   }
   return parts.join(' ').replace(/\s+/g, ' ').trim();
+}
+
+/** 判断这张图是不是多帧（GIF / 动画 WebP）。看文件头就够，不用解码。 */
+async function isAnimatedImage(b, url) {
+  if (String(b.ext || '').toLowerCase() === '.gif') return true;
+  try {
+    const res = await fetch(url, { headers: nest.headers });
+    if (!res.ok) return false;
+    const buf = Buffer.from(await res.arrayBuffer());
+    if (buf.length >= 6) {
+      const head = buf.toString('ascii', 0, 6);
+      if (head === 'GIF87a' || head === 'GIF89a') return true; // 扩展名撒谎时也能认出来
+    }
+    if (buf.length >= 12 && buf.toString('ascii', 0, 4) === 'RIFF' && buf.toString('ascii', 8, 12) === 'WEBP') {
+      return buf.slice(12, 64).includes('ANIM'); // 动画 WebP 有 ANIM 块
+    }
+    return false;
+  } catch {
+    return false;
+  }
 }
 
 /** 把图片下载到本地，AI 才能用文件工具打开看 */

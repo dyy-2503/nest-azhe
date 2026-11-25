@@ -1268,10 +1268,19 @@ if (method === 'DELETE' && /^\/api\/worlds\/\d+$/.test(p)) {
     }
 
     const sha = createHash('sha256').update(raw).digest('hex');
+    // 以"文件内容真实类型"为准：名字叫 .jpg 的动图其实是 GIF 时，
+    // 如果还按声明的 image/jpeg 下发，Safari / 部分图片工具会当成坏图。
+    const SNIFF_MIME = {
+      '.png': 'image/png', '.jpg': 'image/jpeg', '.gif': 'image/gif', '.webp': 'image/webp',
+      '.mp4': 'video/mp4', '.mov': 'video/quicktime', '.webm': 'video/webm',
+      '.ogg': 'audio/ogg', '.mp3': 'audio/mpeg', '.wav': 'audio/wav',
+      '.pdf': 'application/pdf', '.zip': 'application/zip',
+    };
+    const trueMime = SNIFF_MIME[sniffed] || mime;
     await writeFile(join(MEDIA_DIR, sha + sniffed), raw);
-    saveAttachment(sha, mime, raw.length, sniffed, user.id);
+    saveAttachment(sha, trueMime, raw.length, sniffed, user.id);
     return json(res, 200, {
-      sha, ext: sniffed, mime, bytes: raw.length, url: `/media/${sha}${sniffed}`,
+      sha, ext: sniffed, mime: trueMime, bytes: raw.length, url: `/media/${sha}${sniffed}`,
     });
   }
 
