@@ -6,6 +6,9 @@
 
 BASE=/root/nest-local
 cd "$BASE" || exit 0
+
+# 容器里没有 tzdata 时，靠这个让时间和日志走东八区
+export TZ=Asia/Shanghai
 mkdir -p data
 
 # 30 秒内只执行一次，避免 DSH 启动时多个 node 进程同时触发
@@ -33,4 +36,9 @@ if [ -n "$KEY" ]; then
       --dsh http://127.0.0.1:3080 \
       >> data/bridge.log 2>&1 &
   fi
+fi
+
+# ---- 3. 看门狗（每 60 秒探活，挂了自动再跑本脚本）----
+if [ -f "$BASE/watchdog.sh" ] && ! pgrep -f "watchdog.sh" > /dev/null 2>&1; then
+  nohup sh "$BASE/watchdog.sh" >> data/watchdog.log 2>&1 &
 fi

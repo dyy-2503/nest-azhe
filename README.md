@@ -184,6 +184,7 @@ MIT（见 [LICENSE](LICENSE)）。
 ## 文档
 
 - [部署与常见坑](docs/DEPLOY.md)
+- [手机本地世界：安装与调整（DSHA / Shizuku / 省电设置）](docs/PHONE-SETUP.md)
 - [远程访问 / 公网方案](docs/REMOTE.md)
 - [代码签名 / SmartScreen 说明](docs/SIGNING.md)
 - [扩展包格式](docs/EXTENSIONS.md)

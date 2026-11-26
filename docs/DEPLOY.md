@@ -1,5 +1,7 @@
 ﻿# 部署与运维
 
+> 手机（DSHA 容器）那套的完整安装/调整说明见 [PHONE-SETUP.md](PHONE-SETUP.md)。
+
 Nest 的目标是「拷过去就能跑」：没有构建步骤，没有原生模块，没有 node_modules 依赖。
 
 ## 环境要求

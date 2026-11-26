@@ -484,3 +484,16 @@ DSHA 终端页显示「会话已结束」→ 是 **DSHA 的容器会话被系统
   * 发「记住：阿哲爱喝冰美式」→ AI 回复带标记 → 记忆卡片里出现待批人物记忆（private/pending=1）✅
   * 问「你叫什么名字？不许翻文件」→ 直接答「小肥鱼」✅
   * 测试记忆已删除
+
+### 完成记录（2026-11-26 夜 · 手机本地世界装机说明）
+用户要求把"手机本地靠 DSHA + Shizuku"这件事写清楚（怎么下、怎么调）。
+- 新增 `docs/PHONE-SETUP.md`（10KB+）：依赖总览（必需/可选）、DSHA 安装（GitHub DSH-APP/DSHA，含 SHA 校验、包名冲突、升级会冲掉钩子）、
+  DSHA 内部必须改的设置（**省电模式关 + 重启生效**）、Android 系统设置（后台耗电/自启动/锁定/cached_apps_freezer）、
+  容器内安装（离线包 → install-autostart.sh）、自启动钩子与看门狗、验证清单、排障表、**Shizuku 说明（可选，Nest 不依赖）**、
+  一键交给 AI 的提示词、版本与升级、更新流程。
+- 同步补齐代码：`mobile/phone-start.sh` 加 `TZ=Asia/Shanghai` 和看门狗拉起；
+  新增 `mobile/phone-watchdog.sh`、`mobile/deploy.sh`；离线包清单加进 watchdog.sh / deploy.sh；
+  README / DEPLOY / ARCHITECTURE 都链到 PHONE-SETUP.md。
+- 事实依据：DSHA 官方仓库 https://github.com/DSH-APP/DSHA （本机 0.2.21-20261009.0750-dsh0.2.0-rc.2 = v0.2.0-rc2 build170）；
+  Shizuku 官方 https://github.com/RikkaApps/Shizuku 与 https://shizuku.rikka.app/ ；手机实测 vivo V2408A / Android 16。
+- 未完成：手机当时断连，没能现场复核当前机器的省电/冻结器取值（说明书里已给自查命令）。
