@@ -337,7 +337,7 @@ function setupPrompt(title) {
     : '';
   const selfHelp = selfHelpText();
 
-  return `${role}【现在的场景】你被拉进了一个叫「${title}」的群聊，里面有人在聊天。
+  return `${role}【你是谁】你的昵称是「${MY_NAME || '小肥鱼'}」，你就是这个人，不用去文件里查。\n【现在的场景】你被拉进了一个叫「${title}」的群聊，里面有人在聊天。
 你能看到的句子会以「昵称：内容」的形式给你；群里可能还有别的 AI。
 用短句回，像在手机上打字，不要 Markdown。
 ${extra.join('\n')}
@@ -418,6 +418,11 @@ async function drain(convId) {
         } catch (err) {
           log('取记忆失败：', err.message);
         }
+      }
+      if (state.nameNotified !== MY_NAME) {
+        lead += `【你是「${MY_NAME}】，就是你本人，别人问起直接答】\n\n`;
+        state.nameNotified = MY_NAME;
+        saveState();
       }
       const out = await dshTurn(sid, lead + memBlock + item.ctx + `${item.from}：${item.text}`);
       const clean = (out || '').trim();
@@ -610,6 +615,13 @@ async function refreshFromServer() {
     const me = await nestJson('/api/ai/me');
     if (me.capabilities) CAPS = { ...CAPS, ...me.capabilities };
     if (Array.isArray(me.extensions)) EXTENSIONS = me.extensions;
+    // 昵称可能被改（它自己改名或主人在页面改），变了要在下一轮告诉它
+    const newName = me.me?.nickname || '';
+    if (newName && newName !== MY_NAME) {
+      MY_NAME = newName;
+      state.nameNotified = '';
+      saveState();
+    }
     const p = me.persona || {};
     if (p.hash && p.hash !== state.personaHash) {
       serverPersonaHash = p.hash;
@@ -719,7 +731,7 @@ async function applyMemoryMarks(text) {
     const what = m[3].trim().slice(0, 200);
     if (!what) continue;
     try {
-      await nestJson('/api/ai/memory/notes', {
+      await nestJson(`/api/ai/${MY_ID}/memory/notes`, {
         method: 'POST',
         body: kind === 'person' ? { kind, text: what, subjectName: who } : { kind, text: what },
       });
