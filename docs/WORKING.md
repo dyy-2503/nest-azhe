@@ -497,3 +497,13 @@ DSHA 终端页显示「会话已结束」→ 是 **DSHA 的容器会话被系统
 - 事实依据：DSHA 官方仓库 https://github.com/DSH-APP/DSHA （本机 0.2.21-20261009.0750-dsh0.2.0-rc.2 = v0.2.0-rc2 build170）；
   Shizuku 官方 https://github.com/RikkaApps/Shizuku 与 https://shizuku.rikka.app/ ；手机实测 vivo V2408A / Android 16。
 - 未完成：手机当时断连，没能现场复核当前机器的省电/冻结器取值（说明书里已给自查命令）。
+
+### 完成记录（2026-11-26 深夜 · 手机侧状态复核 + 文档补实测值）
+手机重新连上后逐项核验，并写进 `docs/PHONE-SETUP.md` 第 10 节：
+- 设备 vivo V2408A / Android 16；DSHA 0.2.21-…（2026-10-17 安装）；Nest 容器内 0.7.2；App 已装
+- Shizuku 13.6.0 已装但当前未运行（确认 Nest 不依赖）
+- 开发者选项已开；`cached_apps_freezer=disabled`；vivo 后台耗电=**允许后台耗电**；DSHA 省电模式=**关闭**
+- 容器脚本同步：解压 v0.7.2 离线包 → `install-autostart.sh` 把 start.sh 换成带 TZ+看门狗的新版，
+  钩子写入 `/usr/local/share/dsha/dns-compat.cjs`（NEST_LOCAL_AUTOSTART），[4] 服务器 OK / [5] 桥接 OK
+- 重启 DSHA 实测：18 秒内 server/bridge/watchdog 三进程自动起来（22:51:03–05），8787=200
+- 唯一无法 adb 核验：vivo 自启动管理授权状态，文档已标注需手动确认

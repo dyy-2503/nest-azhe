@@ -168,7 +168,7 @@ sh /root/nest-local/deploy.sh
 ```sh
 # 1) 两个端口
 curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:8787/api/server-info   # 200
-curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:3080/                   # 200/302
+curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:3080/                   # 401 也算正常（DSH 要 token）
 
 # 2) 三个进程都在
 ps -ef | grep -E 'server/index.mjs|nest-bridge|watchdog.sh' | grep -v grep
@@ -230,3 +230,28 @@ pkill -f server/index.mjs
 - 本机当前：DSHA `0.2.21-20261009.0750-dsh0.2.0-rc.2`（DSH 0.2.0-rc.2 / Ubuntu 10 / proot）、Nest `0.7.1`。
 - 升级 DSHA：装新 APK（同包名，覆盖安装）→ 重跑 `install-autostart.sh` → 重启 DSHA → 按第 5 节验证。
 - 升级 Nest：生成新离线包 → tar 覆盖 `/root/nest-local` → `sh /root/nest-local/start.sh`（`data/` 不受影响）。
+
+## 10. 本机实测状态（2026-11-26 夜核验）
+
+| 项 | 实测值 |
+|---|---|
+| 手机 | vivo **V2408A** / Android **16** |
+| DSHA | `0.2.21-20261009.0750-dsh0.2.0-rc.2`（2026-10-17 安装；内置 DSH 0.2.0-rc.2 / Ubuntu 10 / proot） |
+| Nest（容器内） | 0.7.2，`/root/nest-local` |
+| Nest App | `app.nest.chat` 已装（壳） |
+| Shizuku | `13.6.0.r1086` 已装；**当前未运行**（按需启动，Nest 不依赖） |
+| 开发者选项 | 已开启 |
+| `cached_apps_freezer` | `disabled`（= 已关闭「暂停执行已缓存的应用」）|
+| vivo 后台耗电（DSHA）| **允许后台耗电**（不是"智能控制"）|
+| DSHA 省电模式 | **关闭**（= 持续保持运行；改完后重启过 DSHA 生效）|
+| 自启动钩子 | `/usr/local/share/dsha/dns-compat.cjs` 里 `NEST_LOCAL_AUTOSTART`（install-autostart.sh 装的）|
+| 看门狗 | `sh /root/nest-local/watchdog.sh` 常驻（60 秒探活）|
+| 端口 | 8787 = 200；3080 不带 token = 401（正常）|
+| 重启 DSHA 实测 | 点「重启」后 **约 18 秒** server/bridge/watchdog 三个进程自动起来（22:51:03–05），8787 恢复 200 |
+
+**无法用 adb 程序化核验的一项**：vivo「自启动管理」（i管家 → 权限管理 → 自启动）的授权状态。
+请手动在手机上看一眼 DSHA 是否为"允许"，这一步只影响**手机重启后 DSHA 会不会被系统拉起**；
+容器内部的钩子/看门狗已在上面验证过。
+
+> 备份：那次同步脚本时自动留了 `/root/nest-local.bak-20261126-224939.tar.gz`（5.8MB）和
+> `/root/dns-compat.cjs.bak-…`，确认稳定后可以删。
