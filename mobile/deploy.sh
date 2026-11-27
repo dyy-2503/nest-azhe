@@ -10,8 +10,9 @@ mkdir -p "$BASE/data"
   echo "=== $(date '+%F %T') 开始更新 ==="
   [ -f "$BASE/data" ] && cp -f "$BASE/data/nest.db" "$BASE/data/nest.db.bak" 2>/dev/null
   tar xzf "$PKG" -C "$BASE" || { echo "解压失败"; exit 1; }
-  pkill -f 'server/index.mjs'
-  pkill -f 'nest-bridge.mjs'
+  # 用 [n] 写法避免 pkill 把执行自己的 shell 也匹配杀掉
+  pkill -f '[s]erver/index.mjs'
+  pkill -f '[n]est-bridge.mjs'
   sleep 1
   sh "$BASE/start.sh"
   sleep 7

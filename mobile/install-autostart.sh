@@ -18,7 +18,7 @@ cd "$BASE" || { echo "找不到 $BASE（先跑 go.sh）"; exit 1; }
 
 # ---- 1. 钥匙 ----
 if [ ! -s data/ai-key.txt ]; then
-  PID=$(pgrep -f "nest-bridge.mjs --server http://127.0.0.1" | head -1)
+  PID=$(pgrep -f "[n]est-bridge.mjs --server http://127.0.0.1" | head -1)
   if [ -n "$PID" ]; then
     tr '\0' ' ' < /proc/$PID/cmdline | sed -n 's/.*--key \([^ ]*\).*/\1/p' > data/ai-key.txt
     chmod 600 data/ai-key.txt
@@ -74,7 +74,7 @@ if curl -s -m 3 http://127.0.0.1:8787/api/server-info > /dev/null 2>&1; then
 else
   echo "[4] 服务器没起来，看 data/server.log"
 fi
-if pgrep -f "nest-bridge.mjs --server http://127.0.0.1:8787" > /dev/null 2>&1; then
+if pgrep -f "[n]est-bridge.mjs --server http://127.0.0.1:8787" > /dev/null 2>&1; then
   echo "[5] 桥接 OK"
 else
   echo "[5] 桥接没起来，看 data/bridge.log"

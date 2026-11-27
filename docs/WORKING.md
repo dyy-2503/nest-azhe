@@ -541,3 +541,15 @@ DSHA 终端页显示「会话已结束」→ 是 **DSHA 的容器会话被系统
 - 电脑中继重新拉起：127.0.0.1:8787 与公网 ts.net 都 200（手机在家庭 Wi-Fi，世界活着）
 - 新增 `.github/workflows/test.yml`：push/PR 自动跑 selftest + 桥接单测 + 桥接集成测试（零依赖，无需 npm install）
 - 已用 v0.8.1 代码打好离线包 `dist/nest-offline.tar.gz`（含发图/上下文修复），等手机插上直接推
+
+
+### 完成记录（2026-11-28 凌晨 · v0.8.1 部署手机 + 真机验证）
+手机插回后推 v0.8.1 离线包并重启（server pid 00:09:56 / bridge 00:09:58；watchdog 沿用旧的没重复）；
+8787=200，bridge 连上消息流。真机验证两条新能力：
+1. **AI 收图 + 回图**：
+   - 主人在聊天里发一张 96×96 的测试图 → AI 回「收到了，蓝底黄块，写着 NEST」
+   - 让它用 `[[nest:image 路径]]` 把原图再发一次 → **AI 真的发回一张图**（新 sha，w=96 h=96）✅
+2. **时间戳**：问「我上一条消息是几点发的？不要查系统时钟」→ AI 答「我上一条消息是 [11-28 00:11]」✅
+- 验证用的 5 条消息已从主人视角隐藏；电脑中继重启后 127.0.0.1:8787 与 ts.net 均 200
+- 顺手修：`mobile/deploy.sh` 里 `pkill -f 'nest-bridge.mjs'` 会匹配到执行它的 shell 自己（手机上的 AI 踩到了），
+  改成 `pkill -f '[n]est-bridge.mjs'` / `'[s]erver/index.mjs'`；`phone-start.sh`、`install-autostart.sh` 的 pgrep 同步改

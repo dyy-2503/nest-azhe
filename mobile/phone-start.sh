@@ -29,7 +29,7 @@ fi
 # ---- 2. 桥接（把本机 DSH 接到本机服务器；钥匙在 data/ai-key.txt）----
 KEY=$(cat data/ai-key.txt 2>/dev/null)
 if [ -n "$KEY" ]; then
-  if ! pgrep -f "nest-bridge.mjs --server http://127.0.0.1:8787" > /dev/null 2>&1; then
+  if ! pgrep -f "[n]est-bridge.mjs --server http://127.0.0.1:8787" > /dev/null 2>&1; then
     nohup node bridge/nest-bridge.mjs \
       --server http://127.0.0.1:8787 \
       --key "$KEY" \
