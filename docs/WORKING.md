@@ -526,3 +526,12 @@ DSHA 终端页显示「会话已结束」→ 是 **DSHA 的容器会话被系统
   新增 `scripts/test-bridge-helpers.mjs` 单测 **15 通过 0 失败**（PNG/JPEG/GIF/WebP 识别与尺寸、时间戳格式、selfHelp 版本）
 - 新增 `docs/BRIDGE.md`：桥接每一轮内容、上下文规则、AI 标记表、记忆注入、日志排障、测试入口
 - 待部署：手机回来后推离线包（bridge 已包含在包里）
+
+
+### 完成记录（2026-11-27 晚 · 桥接集成测试，v0.8.1）
+新增 `scripts/test-bridge-integration.mjs`：真 Nest 服务器 + 假 DSH（自己实现 HTTP RPC 和 WebSocket 帧），
+不依赖手机就能验证桥接的：
+- 启动连上消息流、setup 提示只发一次、新会话补最近历史
+- 每轮提示带 `[MM-DD HH:MM]`、旧消息不重复塞
+- AI 回复里的 `[[nest:image ...]]` 被剥离并真的发出图片消息；`[[nest:sticker ...]]` 发成无边框表情
+实测 **11 通过 0 失败**；`npm test` 现在一次跑服务端(167) + 桥接单测(15) + 桥接集成(11)。

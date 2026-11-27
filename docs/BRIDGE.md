@@ -72,9 +72,11 @@ Nest 消息流(SSE) ──► bridge 排队 ──► DSH 会话(session/prompt)
 ## 6. 测试
 
 ```sh
-# 桥接纯函数（图片识别/时间戳/selfHelp 版本）
-node scripts/test-bridge-helpers.mjs
+npm test                       # 全量：服务端 + 桥接
+npm run test:bridge            # 只跑桥接
 
-# 服务端全量（含 AI 上传/发图消息）
-node scripts/selftest.mjs
+# 单独跑：
+node scripts/selftest.mjs                 # 服务端（含 AI 上传/发图消息）
+node scripts/test-bridge-helpers.mjs      # 图片识别/时间戳/selfHelp 版本
+node scripts/test-bridge-integration.mjs  # 真 Nest + 假 DSH：时间戳/去重/补历史/发图/表情
 ```
