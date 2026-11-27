@@ -233,7 +233,47 @@ async function nestJson(path, init = {}) {
   return json;
 }
 
-/** 上传原始字节（头像用） */
+
+/* ---- AI 发图用：识别图片格式并量尺寸（零依赖） ---- */
+function imageMeta(buf) {
+  if (!buf || buf.length < 12) return null;
+  const at = (i, n) => buf.toString('ascii', i, i + n);
+  if (buf[0] === 0x89 && at(1, 3) === 'PNG') {
+    return { mime: 'image/png', ext: '.png', w: buf.readUInt32BE(16), h: buf.readUInt32BE(20) };
+  }
+  if (at(0, 3) === 'GIF') {
+    return { mime: 'image/gif', ext: '.gif', w: buf.readUInt16LE(6), h: buf.readUInt16LE(8) };
+  }
+  if (buf[0] === 0xff && buf[1] === 0xd8) {
+    let off = 2;
+    while (off + 9 < buf.length) {
+      if (buf[off] !== 0xff) { off++; continue; }
+      const marker = buf[off + 1];
+      const len = buf.readUInt16BE(off + 2);
+      if (marker >= 0xc0 && marker <= 0xcf && ![0xc4, 0xc8, 0xcc].includes(marker)) {
+        return { mime: 'image/jpeg', ext: '.jpg', w: buf.readUInt16BE(off + 7), h: buf.readUInt16BE(off + 5) };
+      }
+      off += 2 + len;
+    }
+    return { mime: 'image/jpeg', ext: '.jpg', w: 0, h: 0 };
+  }
+  if (at(0, 4) === 'RIFF' && at(8, 4) === 'WEBP') {
+    if (at(12, 4) === 'VP8X') {
+      return { mime: 'image/webp', ext: '.webp', w: 1 + buf.readUIntLE(24, 3), h: 1 + buf.readUIntLE(27, 3) };
+    }
+    return { mime: 'image/webp', ext: '.webp', w: 0, h: 0 };
+  }
+  return null;
+}
+
+/** 消息时间戳（容器已设东八区，用本地时间） */
+const stamp = (ts) => {
+  const d = new Date(Number(ts) || Date.now());
+  const p2 = (n) => String(n).padStart(2, '0');
+  return '[' + p2(d.getMonth() + 1) + '-' + p2(d.getDate()) + ' ' + p2(d.getHours()) + ':' + p2(d.getMinutes()) + ']';
+};
+
+/** 上传原始字节（头像/图片用） */
 async function nestRaw(path, method, bytes, contentType) {
   const res = await fetch(`${SERVER}${path}`, {
     method,
@@ -248,13 +288,13 @@ async function nestRaw(path, method, bytes, contentType) {
 }
 
 /** 把 AI 回复里的 [[nest:xxx ...]] 标记执行掉，返回干净的正文 */
-async function applySelfCommands(text) {
-  const re = /\[\[nest:(signature|nickname|avatar)\s+([^\]]+?)\]\]/g;
+async function applySelfCommands(text, convId) {
+  const re = /\[\[nest:(signature|nickname|avatar|image|sticker)\s+([^\]]+?)\]\]/g;
   const found = [...text.matchAll(re)];
   let out = text.replace(re, '').replace(/\n{2,}/g, '\n').trim();
 
   for (const [, kind, value] of found) {
-    const v = value.trim();
+    const v = value.trim().replace(/^["'“”]|["'“”]$/g, '');
     try {
       if (kind === 'signature' || kind === 'nickname') {
         await nestJson('/api/profile', {
@@ -263,17 +303,35 @@ async function applySelfCommands(text) {
         });
         log(`[自我设置] ${kind} = ${v}`);
       } else if (kind === 'avatar') {
-        const file = v.replace(/^["']|["']$/g, '');
-        if (!existsSync(file)) { log('[自我设置] 头像文件不存在：', file); continue; }
-        const ext = file.toLowerCase().split('.').pop();
-        const mime = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif', webp: 'image/webp' }[ext];
-        if (!mime) { log('[自我设置] 不支持的图片格式：', ext); continue; }
-        const up = await nestRaw('/api/upload', 'POST', readFileSync(file), mime);
+        if (!existsSync(v)) { log('[自我设置] 头像文件不存在：', v); continue; }
+        const bytes0 = readFileSync(v);
+        const meta0 = imageMeta(bytes0);
+        if (!meta0) { log('[自我设置] 不是能识别的图片：', v); continue; }
+        const up = await nestRaw('/api/upload', 'POST', bytes0, meta0.mime);
         await nestJson('/api/profile', {
           method: 'POST',
           body: JSON.stringify({ avatar: up.url }),
         });
         log(`[自我设置] 头像 = ${up.url}`);
+      } else if (kind === 'image' || kind === 'sticker') {
+        // 往当前会话发一张图：[[nest:image 绝对路径]] / [[nest:sticker 绝对路径]]
+        if (!convId) { log('[自我设置] 没有会话，图发不出去'); continue; }
+        if (!existsSync(v)) { log('[自我设置] 图片不存在：', v); continue; }
+        const bytes = readFileSync(v);
+        if (bytes.length > 8 * 1024 * 1024) { log('[自我设置] 图片超过 8MB：', v); continue; }
+        const meta = imageMeta(bytes);
+        if (!meta) { log('[自我设置] 不是能识别的图片：', v); continue; }
+        const up = await nestRaw('/api/upload', 'POST', bytes, meta.mime);
+        const sticker = kind === 'sticker';
+        await nestJson('/api/message', {
+          method: 'POST',
+          body: JSON.stringify({
+            conv: convId,
+            clientId: randomUUID(),
+            blocks: [{ t: 'image', sha: up.sha, ext: up.ext, w: sticker ? 0 : meta.w || 0, h: sticker ? 0 : meta.h || 0 }],
+          }),
+        });
+        log(`[自我设置] ${kind} 已发：${v} → ${up.url}`);
       }
     } catch (err) {
       log(`[自我设置] ${kind} 失败：`, err.message);
@@ -314,15 +372,17 @@ let serverPersonaHash = ''; // 服务器上那份人设的指纹
 let CAPS = { memory: true, emotion: true, proactive: true }; // 主人勾的能力
 let EXTENSIONS = [];   // 主人给这个 AI 装的能力扩展（prompt 片段）
 
-const SELF_HELP_VERSION = 2;
+const SELF_HELP_VERSION = 3;
 
 function selfHelpText() {
-  return `【改自己的资料】你的运行环境没有终端，别试着自己跑命令。
-想改的时候，在回复里单独加一行标记，系统会替你执行（这行不会显示给别人）：
-  [[nest:signature 想写的话]]        改签名
-  [[nest:nickname 新名字]]           改名字（主人没允许会失败）
-  [[nest:avatar 图片的本地路径]]      换头像（只能用你手上有路径的图）
-收到别人的图片时，消息里会给出它的本机路径，可以直接拿来当头像。`;
+  return `【你能做的事】你的运行环境没有终端，别试着自己跑命令。
+想做什么，在回复里单独加一行标记，系统会替你执行（这行不会显示给别人）：
+[[nest:signature 想写的话]]        改签名
+[[nest:nickname 新名字]]           改名字（主人没允许会失败）
+[[nest:avatar 图片的本地路径]]      换头像
+[[nest:image 图片的本地路径]]       给当前聊天发一张图（普通图片，带边框）
+[[nest:sticker 图片的本地路径]]     当表情发（无边框，适合表情包）
+路径必须是你真能读到的绝对路径；收到别人的图片时，消息里会给出它的本机路径，可以直接转发或当头像。`;
 }
 
 function setupPrompt(title) {
@@ -338,7 +398,8 @@ function setupPrompt(title) {
   const selfHelp = selfHelpText();
 
   return `${role}【你是谁】你的昵称是「${MY_NAME || '小肥鱼'}」，你就是这个人，不用去文件里查。\n【现在的场景】你被拉进了一个叫「${title}」的群聊，里面有人在聊天。
-你能看到的句子会以「昵称：内容」的形式给你；群里可能还有别的 AI。
+你能看到的句子会以「[MM-DD HH:MM] 昵称：内容」的形式给你（前面是发送时间，别自己猜时间）；群里可能还有别的 AI。
+你自己有完整的对话历史；桥接只会把你还没看到的新消息补给你，不会把旧话重复塞过来。
 用短句回，像在手机上打字，不要 Markdown。
 ${extra.join('\n')}
 ${extText}${selfHelp}
@@ -346,18 +407,64 @@ ${extText}${selfHelp}
 收到请只回一个字：好`;
 }
 
-function pushCtx(convId, line) {
+// 每群记着"哪些消息已经喂给过 DSH"：同一句话绝不重复塞
+const delivered = new Map(); // convId -> Set<messageId>
+
+function markDelivered(convId, id) {
+  if (!id) return;
+  const key = String(convId);
+  const set = delivered.get(key) || new Set();
+  set.add(Number(id));
+  if (set.size > 500) delivered.set(key, new Set([...set].slice(-300)));
+  else delivered.set(key, set);
+}
+
+function isDelivered(convId, id) {
+  return !!id && (delivered.get(String(convId))?.has(Number(id)) || false);
+}
+
+function pushCtx(convId, line, id) {
+  if (isDelivered(convId, id)) return;
   const list = ctx.get(convId) || [];
-  list.push(line);
-  while (list.length > 20) list.shift();   // 只留最近 20 句
+  list.push({ line, id: Number(id) || 0 });
+  while (list.length > 200) list.shift();   // 只防内存，不再"只留 20 句"
   ctx.set(convId, list);
 }
 
 function takeCtx(convId) {
   const list = ctx.get(convId) || [];
   ctx.set(convId, []);
-  if (!list.length) return '';
-  return `【刚才群里还说了】\n${list.join('\n')}\n\n`;
+  const fresh = list.filter((it) => !isDelivered(convId, it.id));
+  for (const it of fresh) markDelivered(convId, it.id);
+  if (!fresh.length) return '';
+  return '【你还没看到的新消息（按时间顺序）】\n' + fresh.map((it) => it.line).join('\n') + '\n\n';
+}
+
+/** 新会话时补上服务器里最近的聊天记录，避免"早期上下文从零开始" */
+async function seedRecentHistory(convId) {
+  try {
+    const r = await nestJson('/api/messages?conv=' + convId + '&limit=30');
+    const list = r.messages || [];
+    const lines = [];
+    for (const m of list) {
+      const who = m.sender?.nickname || '某人';
+      const parts = (m.blocks || []).map((b) => {
+        if (b.t === 'text') return b.v;
+        if (b.t === 'image') return '[图片]';
+        if (b.t === 'voice') return '[语音 ' + (b.sec || 1) + '秒]';
+        if (b.t === 'file') return '[文件 ' + (b.name || '') + ']';
+        if (b.t === 'video') return '[视频]';
+        return '';
+      }).filter(Boolean).join(' ');
+      if (!parts) continue;
+      lines.push(stamp(m.createdAt) + ' ' + who + '：' + parts);
+    }
+    if (!lines.length) return '';
+    return '【这个会话最近的记录（按时间，可能和你记忆里的重合）】\n' + lines.join('\n') + '\n\n';
+  } catch (err) {
+    log('补历史失败：', err.message);
+    return '';
+  }
 }
 
 async function ensureSession(convId) {
@@ -372,6 +479,9 @@ async function ensureSession(convId) {
   log(`建会话（预设 ${created.agentPreset || AGENT_PRESET}）`);
 
   await dshTurn(sid, setupPrompt(titles.get(convId) || '群聊'), 90000);
+  // 新会话没有历史：把服务器上最近 30 条补进去，之后靠会话本身记住
+  const seed = await seedRecentHistory(convId);
+  if (seed) { await dshTurn(sid, seed + '（以上是背景，不用逐条回应，等你看到新消息再说话）', 90000); }
   // 新会话已经把人设交代过了，记下来免得下次重复注入
   if (personaText) { state.personaHash = serverPersonaHash; saveState(); }
   log(`会话就绪：群 ${convId} → ${sid}`);
@@ -401,10 +511,10 @@ async function drain(convId) {
         state.personaHash = h;
         saveState();
       }
-      // 老会话还没见过"你能改自己的资料"这段 → 补一次
-      if (Number(state.selfHelpVersion || 0) !== SELF_HELP_VERSION) {
+      // 每个会话只需看一次"你能改资料/发图"这段
+      if (Number((state.selfHelpFor || {})[String(convId)] || 0) !== SELF_HELP_VERSION) {
         lead += selfHelpText() + '\n\n';
-        state.selfHelpVersion = SELF_HELP_VERSION;
+        state.selfHelpFor = { ...(state.selfHelpFor || {}), [String(convId)]: SELF_HELP_VERSION };
         saveState();
       }
       // 访客/群聊：只给人物档案 + 这个访客自己的记忆；主人私聊不给（nmem 本来就有）
@@ -413,7 +523,13 @@ async function drain(convId) {
         try {
           const mc = await nestJson(`/api/ai/memory/context?viewer=${item.senderId}&conv=${item.convId || 0}`);
           if (mc && mc.mode && mc.mode !== 'owner' && mc.text) {
-            memBlock = `【这一轮是访客在跟你说话】\n${mc.text}\n规则：这些人际记忆可以自然聊起，但不要主动提敏感的事，也不要说"我记得你以前说过"这种暴露记忆库的话。\n\n`;
+            const key = String(convId);
+            const first = (state.memTaught || {})[key] !== mc.mode;
+            memBlock = (first ? '【这一轮是访客在跟你说话】\n' : '')
+              + mc.text + '\n'
+              + (first ? '规则：这些人际记忆可以自然聊起，但不要主动提敏感的事，也不要说"我记得你以前说过"。\n' : '')
+              + '\n';
+            if (first) { state.memTaught = { ...(state.memTaught || {}), [key]: mc.mode }; saveState(); }
           }
         } catch (err) {
           log('取记忆失败：', err.message);
@@ -424,14 +540,15 @@ async function drain(convId) {
         state.nameNotified = MY_NAME;
         saveState();
       }
-      const out = await dshTurn(sid, lead + memBlock + item.ctx + `${item.from}：${item.text}`);
+      const out = await dshTurn(sid, lead + memBlock + item.ctx + item.line);
+      markDelivered(convId, item.msgId);
       const clean = (out || '').trim();
       if (!clean || SILENT.test(clean)) {
         log(`[静默] ${convId}「${item.text.slice(0, 20)}」`);
         aiChain.set(convId, (aiChain.get(convId) || 0) + 1);
         continue;
       }
-      await postMessage(convId, await applySelfCommands(await applyMemoryMarks(clean)));
+      await postMessage(convId, await applySelfCommands(await applyMemoryMarks(clean), convId));
       aiChain.set(convId, (aiChain.get(convId) || 0) + 1);
       log(`[回] ${convId} ${clean.slice(0, 40)}`);
       await sleep(400);
@@ -445,7 +562,16 @@ async function drain(convId) {
 
 function enqueue(convId, from, text, meta = {}) {
   const q = queues.get(convId) || [];
-  q.push({ from, text, ctx: takeCtx(convId), senderId: meta.senderId || 0, senderKind: meta.senderKind || 'human', convId });
+  q.push({
+    from,
+    text,
+    line: `${stamp(meta.ts)} ${from}：${text}`,
+    ctx: takeCtx(convId),
+    senderId: meta.senderId || 0,
+    senderKind: meta.senderKind || 'human',
+    convId,
+    msgId: Number(meta.msgId) || 0,
+  });
   queues.set(convId, q);
   // 连着来好几句就攒一下
   setTimeout(() => drain(convId), 800);
@@ -851,12 +977,12 @@ async function handleEvent(ev) {
   if (m.sender.kind === 'agent') {
     const mentioned = MY_NAME && text.includes('@' + MY_NAME);
     if (!mentioned || (aiChain.get(convId) || 0) >= 3) {
-      pushCtx(convId, `${from}：${text}`);
+      pushCtx(convId, `${stamp(m.createdAt)} ${from}：${text}`, m.id);
       log(`[旁听] ${convId} ${from}：${text.slice(0, 24)}`);
       return;
     }
     log(`[被点名] ${convId} ${from}：${text.slice(0, 24)}`);
-    enqueue(convId, from, text, { senderId: m.sender.id, senderKind: m.sender.kind });
+    enqueue(convId, from, text, { senderId: m.sender.id, senderKind: m.sender.kind, ts: m.createdAt, msgId: m.id });
     return;
   }
 
@@ -867,11 +993,11 @@ async function handleEvent(ev) {
   if (CAPS.proactive === false && convKinds.get(convId) !== 'dm') {
     const called = MY_NAME && text.includes('@' + MY_NAME);
     if (!called) {
-      pushCtx(convId, `${from}：${text}`);
+      pushCtx(convId, `${stamp(m.createdAt)} ${from}：${text}`, m.id);
       return;
     }
   }
-  enqueue(convId, from, text, { senderId: m.sender.id, senderKind: m.sender.kind });
+  enqueue(convId, from, text, { senderId: m.sender.id, senderKind: m.sender.kind, ts: m.createdAt, msgId: m.id });
 }
 
 process.on('unhandledRejection', (err) => log('未处理的异常：', err?.message || err));

@@ -370,6 +370,18 @@ ok('对不存在的 AI 返回 404', r.status === 404, `HTTP ${r.status}`);
 
   r = await req(`/api/ai/${aiId}/memory/notes/${personId}`, { method: 'DELETE', j: jA });
   ok('删掉一条记忆卡片', r.status === 200);
+
+  /* ---------- AI 自己发图 ---------- */
+  console.log('\n== AI 发图 ==');
+  r = await req('/api/upload', { method: 'POST', raw: PNG, type: 'image/png', key: aiKey });
+  ok('AI 能上传图片', r.status === 200 && r.json?.ext === '.png' && !!r.json?.sha, 'HTTP ' + r.status + ' ' + String(r.text || '').slice(0, 100));
+  const aiImgSha = r.json?.sha, aiImgExt = r.json?.ext;
+  r = await req('/api/message', { method: 'POST', body: { conv: dmConv.id, blocks: [{ t: 'image', sha: aiImgSha, ext: aiImgExt, w: 0, h: 0 }], clientId: 'ai-img-1' }, key: aiKey });
+  ok('AI 能发图片消息', r.status === 200, 'HTTP ' + r.status + ' ' + String(r.text || '').slice(0, 100));
+  const aiImgMsgId = r.json?.message?.id;
+  r = await req('/api/messages?conv=' + dmConv.id, { j: jA });
+  const aiGot = (r.json?.messages || []).find((m) => m.id === aiImgMsgId);
+  ok('主人能收到图片消息', !!aiGot && aiGot.blocks?.[0]?.t === 'image' && aiGot.blocks?.[0]?.sha === aiImgSha, JSON.stringify(aiGot?.blocks || []).slice(0, 120));
 /* ---------- 群 + 消息 ---------- */
   console.log('\n== 群与消息 ==');
   r = await req('/api/conversation', { method: 'POST', body: { title: '测试群', memberIds: [meB.id] }, j: jA });
