@@ -1,0 +1,23 @@
+name: tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      # 项目零依赖：不需要 npm install
+      - name: 服务端自测
+        run: node --no-warnings scripts/selftest.mjs
+      - name: 桥接纯函数单测
+        run: node --no-warnings scripts/test-bridge-helpers.mjs
+      - name: 桥接集成测试（Mock DSH）
+        run: node --no-warnings scripts/test-bridge-integration.mjs
